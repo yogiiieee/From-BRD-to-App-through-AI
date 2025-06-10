@@ -361,7 +361,7 @@
         </button>
         
         <!-- Chatbot Window -->
-        <div id="chatbotWindow" class="hidden absolute bottom-16 right-0 w-80 h-96 neo-card rounded-2xl border border-gray-200 dark:border-gray-700 flex flex-col">
+        <div id="chatbotWindow" class="hidden absolute bottom-16 right-0 w-80 h-96 neo-card rounded-2xl border border-gray-200 dark:border-gray-700 flex-col">
             <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
                 <div class="flex items-center">
                     <div class="w-8 h-8 gradient-bg rounded-full flex items-center justify-center mr-3">
@@ -781,6 +781,157 @@
             }, 4000);
         });
 
+        
+        // In brd-upload.html (or a separate JS file for clarity)
+        // ... after you get analysis_data from pdfparser/upload/
+        const generateButton = document.getElementById('generateAppBtn'); // Assume this exists
+        if (generateButton) {
+            generateButton.addEventListener('click', async () => {
+                const projectId = Date.now(); // Placeholder for actual Project ID logic if you don't have one yet
+                const dataToSend = {
+                    analysis_data: your_analysis_data_object, // The JSON object you got from pdfparser/upload/
+                    project_name: "MyNewGeneratedApp", // User input or derived
+                    // brd_id: your_brd_model_id_if_stored // If you store BRDs in DB
+                };
+
+                // Show loading spinner for generation
+                showLoadingStateForGeneration(); // You'll need to implement this UI function
+
+                try {
+                    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+                    const response = await fetch('/core/generate-project/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken, // Don't forget CSRF token for JSON POSTs
+                        },
+                        body: JSON.stringify(dataToSend)
+                    });
+
+                    const result = await response.json();
+
+                    // Hide loading spinner for generation
+                    hideLoadingStateForGeneration(); // You'll need to implement this UI function
+
+                    if (result.status === 'success') {
+                        showNotification('Project generation started successfully!', 'success');
+                        // Now, you can trigger listing files or a preview directly
+                        const newProjectId = result.project_id;
+                        // Example: Call a function to display the generated project UI
+                        displayGeneratedProjectUI(newProjectId);
+
+                    } else {
+                        showNotification(result.message, 'error');
+                        console.error('Project generation failed:', result.message, result);
+                    }
+                } catch (error) {
+                    hideLoadingStateForGeneration();
+                    showNotification('An error occurred during project generation.', 'error');
+                    console.error('Fetch error during project generation:', error);
+                }
+            });
+        }
+
+        async function displayGeneratedProjectUI(projectId) {
+            // Function to fetch file list and render
+            try {
+                const response = await fetch(`/core/list-files/${projectId}/`);
+                const data = await response.json();
+                if (data.status === 'success') {
+                    // Render the file tree/list in your UI using data.files
+                    console.log("Generated files:", data.files);
+                    // Example: update a div with id="generatedProjectTree"
+                    const treeContainer = document.getElementById('generatedProjectTree');
+                    if (treeContainer) {
+                        treeContainer.innerHTML = '<h3>Generated Files:</h3><ul>' + 
+                            data.files.map(f => `<li><a href="#" onclick="previewFile(<span class="math-inline">\{projectId\}, '</span>{f.path}')"><span class="math-inline">\{f\.path\} \(</span>{f.type})</a></li>`).join('') +
+                            '</ul><button onclick="window.location.href=\'/core/download/' + projectId + '/\'">Download Project</button>';
+                    }
+                } else {
+                    showNotification(data.message, 'error');
+                }
+            } catch (error) {
+                console.error('Error fetching generated file list:', error);
+            }
+        }
+
+        // --- Function to fetch and display a file's content for preview ---
+        async function previewFile(projectId, filePath) {
+            const codePreviewArea = document.getElementById('codePreviewArea'); // Make sure this element exists in your HTML
+            if (!codePreviewArea) {
+                showNotification('Error: Code preview area not found in HTML.', 'error');
+                console.error('Error: Element with ID "codePreviewArea" not found.');
+                return;
+            }
+
+            // Show a loading indicator in the preview area
+            codePreviewArea.innerHTML = '<div class="text-center text-gray-500 dark:text-gray-400">Loading preview...</div>';
+            codePreviewArea.classList.remove('hidden'); // Ensure it's visible
+
+            try {
+                // IMPORTANT: Encode the filePath to handle slashes and other URL-unsafe characters
+                const encodedFilePath = encodeURIComponent(filePath);
+                
+                // Make the fetch request to your Django view
+                const response = await fetch(`/core/preview/${projectId}/${encodedFilePath}/`);
+                const data = await response.json(); // Expecting JSON response from Django
+
+                if (response.ok) { // Check for successful HTTP status (2xx)
+                    // Display content in a syntax-highlighted block
+                    // You might need a library like highlight.js for actual highlighting
+                    // <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css">
+                    // <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+                    // hljs.highlightElement(codePreviewArea.querySelector('code')); // After setting innerHTML
+
+                    codePreviewArea.innerHTML = `
+                        <div class="bg-gray-800 p-4 rounded-xl shadow-inner overflow-x-auto">
+                            <div class="text-xs text-gray-400 mb-2">${data.filename}</div>
+                            <pre><code class="language-${data.language}">${escapeHtml(data.content)}</code></pre>
+                        </div>
+                    `;
+                    // If you're using highlight.js, you'd call it here:
+                    // if (typeof hljs !== 'undefined') {
+                    //     hljs.highlightAll(); // or highlightElement on the specific code block
+                    // }
+
+                    showNotification(`Previewing ${data.filename}`, 'info');
+                } else {
+                    // Handle errors returned by the Django view (e.g., 404, 500)
+                    showNotification(data.error || 'Failed to load file preview.', 'error');
+                    codePreviewArea.innerHTML = `<div class="text-center text-red-500">Error: ${data.error || 'Failed to load preview.'}</div>`;
+                    console.error('Preview fetch error:', data);
+                }
+            } catch (error) {
+                console.error('Network or parsing error during file preview:', error);
+                showNotification('An unexpected error occurred during preview.', 'error');
+                codePreviewArea.innerHTML = `<div class="text-center text-red-500">An unexpected error occurred.</div>`;
+            }
+        }
+
+        // --- Function to trigger download of the entire project ZIP ---
+        function downloadProject(projectId) {
+            if (!projectId) {
+                showNotification('Error: Project ID is missing for download.', 'error');
+                return;
+            }
+            showNotification('Preparing project for download...', 'info');
+            // Django view will return a file download, so direct assignment to window.location.href works.
+            window.location.href = `/core/download/${projectId}/`;
+        }
+        // Helper to escape HTML for safe injection (important for previewing code)
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+        }
+        */
+
+        
         // Chatbot functionality
         const chatbotBtn = document.getElementById('chatbotBtn');
         const chatbotWindow = document.getElementById('chatbotWindow');

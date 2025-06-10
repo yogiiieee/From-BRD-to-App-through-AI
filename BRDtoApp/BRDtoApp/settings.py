@@ -18,7 +18,7 @@ load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'django_browser_reload',
     'pdfparser',
     'accounts',
+    'core',
 ]
 
 TAILWIND_APP_NAME = "theme"
@@ -95,7 +96,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',  # ← Changed from sqlite3(default)
         'NAME': 'brdcreator',
         'USER': 'mydjangouser',
-        'PASSWORD': 'helloworld',  # Use the password you set
+        'PASSWORD': 'helloworld',  
         'HOST': 'localhost',
         'PORT': '5432',
     }

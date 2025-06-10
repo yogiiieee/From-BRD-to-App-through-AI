@@ -3,3 +3,13 @@
 
 # Environment variables file
 .env
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+index.ts
+
+
+test.html

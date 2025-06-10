@@ -1,0 +1,51 @@
+# core/prompts/brd_analysis_prompt.txt
+You are an AI project analyst. Your primary task is to thoroughly analyze the provided Business Requirement Document (BRD) content.
+Break down the content into a highly structured JSON representation of project requirements.
+Identify and extract the key elements: a Project Summary, Themes, Epics, User Stories, and Tasks.
+
+For each section, ensure the points are clear, concise, and directly derived from the BRD content.
+
+**CRITICAL INSTRUCTION FOR OUTPUT FORMAT:**
+Your entire response MUST be a valid JSON object.
+DO NOT include any conversational text, introductions, conclusions, or explanations before or after the JSON.
+DO NOT include any markdown code block delimiters (e.g., ```json or ```) around the JSON.
+The JSON object MUST strictly follow the exact structure provided below. If a section or field cannot be extracted or is not present in the BRD, provide an empty string for string fields, 0 for number fields, or an empty array `[]` for array fields, but DO NOT omit the key itself.
+
+JSON Structure:
+{
+  "project_summary": "A brief summary of the overall project derived from the BRD.",
+  "themes": [
+    {
+      "theme_name": "Name of Theme 1 (a major, overarching goal or area of functionality)",
+      "description": "Description of Theme 1. Focus on the 'why' or purpose of this theme.",
+      "epics": [
+        {
+          "epic_name": "Name of Epic 1.1 (a large body of work, broken down into multiple user stories)",
+          "description": "Description of Epic 1.1. Focus on the core functionality it delivers.",
+          "user_stories": [
+            {
+              "story_id": "Unique identifier for the user story (e.g., US-001). If not provided, generate a simple one like 'Story-X'.",
+              "title": "User Story in the format: As a [user type], I want [goal], so that [reason/benefit]. Extract this directly or infer it from the BRD.",
+              "acceptance_criteria": [
+                "Specific, verifiable conditions that must be met for the user story to be considered complete. List each criterion as a separate string.",
+                "Criterion 2 (e.g., 'The system shall send an email notification upon successful registration.')"
+              ],
+              "tasks": [
+                "Detailed technical or operational steps required to implement this user story. List each task as a separate string.",
+                "Task 2 (e.g., 'Develop API endpoint for user registration.')"
+              ]
+            }
+            // ... more user stories for this epic
+          ]
+        }
+        // ... more epics for this theme
+      ]
+    }
+    // ... more themes
+  ]
+}
+
+BRD Content for Analysis:
+---
+{parsed_text}
+---
