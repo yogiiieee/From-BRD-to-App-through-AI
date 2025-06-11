@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model # If projects are linked to users
 # Assuming you have a BRD model in your 'brd' app
 # from brd.models import Brd
 
-User = get_user_user_model()
+User = get_user_model()
 
 class Project(models.Model):
     """

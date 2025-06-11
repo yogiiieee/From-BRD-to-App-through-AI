@@ -2,27 +2,21 @@
 import google.generativeai as genai
 import os
 import logging
-import json # For JSONDecodeError handling
-import re # For markdown stripping
+import json
+import re
 
 logger = logging.getLogger(__name__)
 
-# Ensure your .env is loaded in settings.py before this runs
 try:
     genai.configure(api_key=os.environ["GEMINI_API_KEY"])
 except KeyError:
     logger.error("GEMINI_API_KEY environment variable not set. Please set it in your .env file or environment.")
     raise EnvironmentError("GEMINI_API_KEY not found.")
 
-# You might want to experiment with different models:
-# gemini-1.5-flash is faster and cheaper, good for rapid iteration/testing
-# gemini-1.5-pro is generally more capable and better for complex code generation
-# model = genai.GenerativeModel("gemini-1.5-flash")
-model = genai.GenerativeModel("gemini-1.5-pro") # Recommended for code generation tasks
+model = genai.GenerativeModel("gemini-1.5-flash") # Recommended for code generation, use flash for faster/cheaper iteration
 
 def load_prompt_template(template_name):
     """Loads a prompt template from the core/prompts directory."""
-    # This path is relative to the current file (gemini_client.py)
     current_dir = os.path.dirname(__file__)
     prompt_path = os.path.join(current_dir, '../prompts', template_name)
     try:
@@ -40,7 +34,7 @@ def _extract_json_from_markdown(text_with_markdown):
     match = re.search(r'```json\n(.*?)\n```', text_with_markdown, re.DOTALL)
     if match:
         return match.group(1).strip()
-    return text_with_markdown.strip() # Fallback if no markdown block
+    return text_with_markdown.strip()
 
 def generate_text(prompt, parse_json=False):
     """
@@ -57,28 +51,76 @@ def generate_text(prompt, parse_json=False):
                 return json.loads(json_string)
             except json.JSONDecodeError as json_e:
                 logger.error(f"JSON Decode Error after markdown strip: {json_e}. Raw AI text: {raw_text}")
-                # You might want to return an error dictionary or re-raise
                 return {"error": "JSON_PARSE_ERROR", "details": str(json_e), "raw_ai_response": raw_text}
         
-        return raw_text # Return raw text if not parsing JSON
+        return raw_text
 
     except Exception as e:
         logger.error(f"Error generating content from Gemini: {e}", exc_info=True)
         return f"AI generation failed: {e}"
 
+# core/services/gemini_client.py (Only the analyze_brd function is changed)
+
+# ... (rest of your gemini_client.py code remains the same: imports, logger, genai.configure, model, load_prompt_template, _extract_json_from_markdown, generate_text) ...
+
 def analyze_brd(parsed_text):
     """
     Analyzes BRD text and returns structured JSON data.
+    This function now correctly combines base_prompt.txt and brd_analysis_prompt.txt,
+    and uses generate_text's built-in JSON parsing.
     """
-    # Load the base BRD analysis prompt template
-    prompt_template = load_prompt_template('brd_analysis_prompt.txt') 
+    try:
+        # 1. Load the raw content of the base prompt
+        base_template_raw = load_prompt_template('base_prompt.txt')
+        # 2. Load the raw content of the specific BRD analysis prompt template
+        # This template still contains {base_prompt_content} AND {parsed_text}
+        brd_analysis_template_raw = load_prompt_template('brd_analysis_prompt.txt')
 
-    # Format the prompt with the BRD content
-    prompt = prompt_template.format(parsed_text=parsed_text)
-    
-    # Use generate_text and instruct it to parse JSON
-    # This function expects pure JSON and should not have markdown wrappers
-    # Modify your `brd_analysis_prompt.txt` to explicitly tell the AI:
-    # "Your entire response MUST be a valid JSON object. Do NOT include any text before or after the JSON. Do NOT include markdown code block delimiters (```json)."
-    analysis_data = generate_text(prompt, parse_json=True)
-    return analysis_data
+        # 3. First substitution: Inject the base prompt content into the BRD analysis template.
+        # We use .replace() here, which is safer when dealing with placeholders
+        # that aren't meant to be formatted in the current step.
+        # This results in a string that now contains the base prompt content,
+        # but still has the '{parsed_text}' placeholder waiting for the next step.
+        intermediate_prompt_template = brd_analysis_template_raw.replace(
+            '{base_prompt_content}', base_template_raw
+        )
+        
+        # 4. Final substitution: Format the intermediate template with the actual parsed_text.
+        # At this point, intermediate_prompt_template only contains the {parsed_text} placeholder.
+        final_prompt = intermediate_prompt_template.format(parsed_text=parsed_text)
+        
+        # 5. Send the fully assembled prompt to Gemini for analysis, expecting JSON.
+        analysis_data = generate_text(final_prompt, parse_json=True)
+        
+        # If generate_text returned an error dictionary, propagate it immediately
+        if isinstance(analysis_data, dict) and (analysis_data.get('error') or analysis_data.get('JSON_PARSE_ERROR')):
+            return analysis_data # Propagate the error dict directly
+
+        # --- Remaining Validation (if analysis_data is a dict from generate_text) ---
+        if not isinstance(analysis_data, dict):
+            # This case should ideally not happen if generate_text worked as expected
+            # and returned a dict on success or an error dict on failure.
+            # But as a safeguard:
+            raise ValueError("AI response, after parsing, is not a dictionary as expected.")
+            
+        # Check for required top-level fields as per your schema
+        required_fields = ['project_summary', 'themes']
+        for field in required_fields:
+            if field not in analysis_data:
+                raise ValueError(f"Required field '{field}' missing from AI response JSON.")
+                
+        # Ensure project_summary is a string (basic type check)
+        if not isinstance(analysis_data.get('project_summary'), str):
+            raise ValueError("project_summary must be a string in AI response.")
+            
+        return analysis_data
+        
+    except Exception as e:
+        logger.error(f"Critical error during BRD analysis or prompt assembly: {str(e)}", exc_info=True)
+        # Attempt to capture the raw response before the error, if it was generated
+        raw_response_for_error = locals().get('raw_response', 'N/A')
+        return {
+            'error': True,
+            'details': f"Failed to analyze BRD due to an internal processing error: {str(e)}",
+            'raw_ai_response': raw_response_for_error
+        }

@@ -10,6 +10,5 @@ __pycache__/
 *$py.class
 
 index.ts
-
-
-test.html
+BRDtoApp/test.html
+BRDtoApp/templates/website/placeholder.html

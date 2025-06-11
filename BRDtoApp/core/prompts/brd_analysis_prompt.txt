@@ -1,9 +1,22 @@
 # core/prompts/brd_analysis_prompt.txt
+
+# Base Prompt Content:
+# {base_prompt_content}
+# Note: You should dynamically inject the content of base_prompt.txt at the top of this file
+# in your Python code (e.g., in gemini_client.py's analyze_brd function),
+# as discussed previously. This placeholder reminds us of that.
+
 You are an AI project analyst. Your primary task is to thoroughly analyze the provided Business Requirement Document (BRD) content.
 Break down the content into a highly structured JSON representation of project requirements.
 Identify and extract the key elements: a Project Summary, Themes, Epics, User Stories, and Tasks.
 
-For each section, ensure the points are clear, concise, and directly derived from the BRD content.
+Ensure all extracted information is highly accurate, directly reflects the BRD content, and is logically consistent.
+Where information is implied rather than explicitly stated, make reasonable and conservative inferences, prioritizing clarity and actionable detail.
+
+For each identified section (Summary, Theme, Epic, User Story, Task):
+- Provide clear, concise points.
+- Ensure the content is directly derived from the BRD.
+- Transform informal BRD language into the precise structure requested by the JSON schema.
 
 **CRITICAL INSTRUCTION FOR OUTPUT FORMAT:**
 Your entire response MUST be a valid JSON object.
@@ -12,38 +25,35 @@ DO NOT include any markdown code block delimiters (e.g., ```json or ```) around 
 The JSON object MUST strictly follow the exact structure provided below. If a section or field cannot be extracted or is not present in the BRD, provide an empty string for string fields, 0 for number fields, or an empty array `[]` for array fields, but DO NOT omit the key itself.
 
 JSON Structure:
-{
-  "project_summary": "A brief summary of the overall project derived from the BRD.",
+{{
+  "project_summary": "A brief, high-level summary of the overall project's purpose and main goals, derived from the BRD.",
   "themes": [
-    {
-      "theme_name": "Name of Theme 1 (a major, overarching goal or area of functionality)",
-      "description": "Description of Theme 1. Focus on the 'why' or purpose of this theme.",
+    {{
+      "theme_name": "A major, overarching functional area or strategic goal of the project (e.g., 'User Management', 'Product Catalog', 'Reporting').",
+      "description": "A concise description of this theme, explaining its scope and why it's important.",
       "epics": [
-        {
-          "epic_name": "Name of Epic 1.1 (a large body of work, broken down into multiple user stories)",
-          "description": "Description of Epic 1.1. Focus on the core functionality it delivers.",
+        {{
+          "epic_name": "A large body of work within a theme, representing a significant feature or a collection of related user stories.",
+          "description": "A description of the epic's purpose and the high-level functionality it aims to deliver.",
           "user_stories": [
-            {
-              "story_id": "Unique identifier for the user story (e.g., US-001). If not provided, generate a simple one like 'Story-X'.",
-              "title": "User Story in the format: As a [user type], I want [goal], so that [reason/benefit]. Extract this directly or infer it from the BRD.",
+            {{
+              "story_id": "Unique identifier for the user story (e.g., 'US-001'). If not explicitly stated in the BRD, infer or generate a simple, sequential ID (e.g., 'Story-1', 'US-2') maintaining a consistent numbering scheme.",
+              "title": "The user story following the 'As a [type of user], I want to [goal], so that [reason/benefit]' format. Extract this directly or infer it accurately and precisely from the BRD text.",
               "acceptance_criteria": [
-                "Specific, verifiable conditions that must be met for the user story to be considered complete. List each criterion as a separate string.",
+                "Specific, verifiable conditions that MUST be met for the user story to be considered complete and successful. Focus on testable outcomes. List each criterion as a separate string.",
                 "Criterion 2 (e.g., 'The system shall send an email notification upon successful registration.')"
               ],
               "tasks": [
-                "Detailed technical or operational steps required to implement this user story. List each task as a separate string.",
+                "Detailed, concrete technical or operational steps required to implement this specific user story. These tasks should be directly actionable and granular enough for development. List each task as a separate string.",
                 "Task 2 (e.g., 'Develop API endpoint for user registration.')"
               ]
-            }
-            // ... more user stories for this epic
+            }}
           ]
-        }
-        // ... more epics for this theme
+        }}
       ]
-    }
-    // ... more themes
+    }}
   ]
-}
+}}
 
 BRD Content for Analysis:
 ---
