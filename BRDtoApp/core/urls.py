@@ -17,4 +17,7 @@ urlpatterns = [
 
     # URL for downloading the entire generated project as a zip
     path('download/<int:project_id>/', views.download_project_zip, name='download_project'),
+
+    # URL for triggering tech stack identification
+    path('identify-tech-stack/', views.identify_tech_stack_view, name='identify_tech_stack'),
 ]

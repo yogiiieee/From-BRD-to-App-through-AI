@@ -1,0 +1,28 @@
+# core/prompts/tech_stack_identification_prompt.txt
+{base_prompt_content}
+
+Your current task is to analyze the provided structured Business Requirement Document (BRD) analysis data.
+Based on the project summary, themes, epics, and user stories within this data, identify the **primary frontend and backend technologies** that the project is intended to use.
+
+If a technology is explicitly mentioned (e.g., "React frontend", "Node.js backend", "Django API"), extract it directly.
+If the technology is not explicitly mentioned but can be reasonably inferred from typical industry practices for the described features (e.g., a "REST API" implies a backend framework, "interactive UI" implies a frontend framework), make a conservative inference.
+If no frontend or backend technology can be identified or inferred, provide an empty string for that field.
+
+**CRITICAL INSTRUCTION FOR OUTPUT FORMAT:**
+Your entire response MUST be a valid JSON object.
+DO NOT include any conversational text, introductions, conclusions, or explanations before or after the JSON.
+DO NOT include any markdown code block delimiters (e.g., ```json or ```) around the JSON.
+The JSON object MUST strictly follow the exact structure provided below.
+The keys `frontend` and `backend` must always be present.
+
+JSON Structure:
+{{
+  "frontend": "Identified frontend technology (e.g., 'React', 'Vue', 'Angular', 'Plain HTML/CSS/JS', 'None' if purely backend)",
+  "backend": "Identified backend technology (e.g., 'Node.js', 'Django', 'Flask', 'Spring Boot', 'Laravel', 'None' if purely frontend)",
+  "database": "Identified database technology (e.g., 'PostgreSQL', 'MySQL', 'MongoDB', 'None' if not specified)",
+}}
+
+BRD Analysis Data:
+---
+{brd_analysis_json}
+---

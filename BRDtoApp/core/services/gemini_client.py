@@ -124,3 +124,63 @@ def analyze_brd(parsed_text):
             'details': f"Failed to analyze BRD due to an internal processing error: {str(e)}",
             'raw_ai_response': raw_response_for_error
         }
+
+def identify_tech_stack(brd_analysis_data_json):
+    """
+    Identifies the tech stack (frontend/backend) based on the structured BRD analysis data.
+    
+    Args:
+        brd_analysis_data_json (dict): The structured JSON output from analyze_brd.
+                                        This will be converted to a JSON string for the prompt.
+    Returns:
+        dict: A dictionary like {"frontend": "React", "backend": "Node.js"} or an error dict.
+    """
+    try:
+        # 1. Load the raw content of the base prompt
+        base_template_raw = load_prompt_template('base_prompt.txt')
+
+        # 2. Load the specific tech stack identification prompt template
+        tech_stack_template_raw = load_prompt_template('tech_stack_identification_prompt.txt')
+
+        # 3. First substitution: Inject the base prompt content
+        intermediate_prompt_template = tech_stack_template_raw.replace(
+            '{base_prompt_content}', base_template_raw
+        )
+        
+        # 4. Final substitution: Inject the BRD analysis JSON data
+        # IMPORTANT: Convert the Python dict to a JSON string for the prompt
+        brd_analysis_json_string = json.dumps(brd_analysis_data_json, indent=2)
+        
+        final_prompt = intermediate_prompt_template.format(
+            brd_analysis_json=brd_analysis_json_string
+        )
+        
+        # 5. Send the prompt to Gemini for tech stack identification, expecting JSON.
+        tech_stack_data = generate_text(final_prompt, parse_json=True)
+        
+        # If generate_text returned an error dictionary, propagate it
+        if isinstance(tech_stack_data, dict) and (tech_stack_data.get('error') or tech_stack_data.get('JSON_PARSE_ERROR')):
+            logger.error(f"AI failed to identify tech stack: {tech_stack_data.get('details', 'Unknown error')}")
+            return tech_stack_data 
+
+        # --- Basic Validation for tech_stack_data ---
+        if not isinstance(tech_stack_data, dict):
+            raise ValueError("AI tech stack response is not a dictionary as expected.")
+        
+        if 'frontend' not in tech_stack_data or 'backend' not in tech_stack_data:
+            raise ValueError("Required 'frontend' or 'backend' fields missing from tech stack response.")
+        
+        if not isinstance(tech_stack_data['frontend'], str) or not isinstance(tech_stack_data['backend'], str):
+            raise ValueError("'frontend' and 'backend' must be strings.")
+
+        return tech_stack_data
+        
+    except Exception as e:
+        logger.error(f"Critical error during tech stack identification: {str(e)}", exc_info=True)
+        # Attempt to capture raw response if it was generated before the error
+        raw_response_for_error = locals().get('raw_response', 'N/A')
+        return {
+            'error': True,
+            'details': f"Failed to identify tech stack due to an internal processing error: {str(e)}",
+            'raw_ai_response': raw_response_for_error
+        }

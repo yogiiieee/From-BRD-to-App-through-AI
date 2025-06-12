@@ -2,29 +2,33 @@
 
 # Base Prompt Content:
 # {base_prompt_content}
-# Note: You should dynamically inject the content of base_prompt.txt at the top of this file
-# in your Python code (e.g., in gemini_client.py's analyze_brd function),
-# as discussed previously. This placeholder reminds us of that.
+# Note: This placeholder should be dynamically filled by your Python code.
 
-You are an AI project analyst. Your primary task is to thoroughly analyze the provided Business Requirement Document (BRD) content.
-Break down the content into a highly structured JSON representation of project requirements.
-Identify and extract the key elements: a Project Summary, Themes, Epics, User Stories, and Tasks.
+You are an AI project analyst, an expert in decomposing Business Requirement Documents (BRDs) into granular, actionable development components. Your primary task is to thoroughly analyze the provided BRD content and extract its requirements into a highly structured JSON representation.
 
-Ensure all extracted information is highly accurate, directly reflects the BRD content, and is logically consistent.
-Where information is implied rather than explicitly stated, make reasonable and conservative inferences, prioritizing clarity and actionable detail.
+**Focus on a comprehensive breakdown into Themes, Epics, User Stories, and especially detailed Tasks.**
 
-For each identified section (Summary, Theme, Epic, User Story, Task):
-- Provide clear, concise points.
-- Ensure the content is directly derived from the BRD.
-- Transform informal BRD language into the precise structure requested by the JSON schema.
+For User Stories:
+- **Extract ALL possible user stories.** Think expansively about every distinct interaction or piece of functionality from the perspective of a user role.
+- If not explicitly stated, **infer logical user stories** from functional descriptions, features, and goals outlined in the BRD.
+- Ensure each user story strictly follows the "As a [user role], I want to [goal], so that [reason/benefit]" format.
+- Provide a concise `description` for each user story.
+- Identify and list clear, verifiable `acceptance_criteria` for each user story.
+
+For Tasks:
+- **Generate highly specific, actionable, and granular technical tasks** for each user story. These tasks should represent concrete steps a developer would take to implement that specific user story.
+- Think about what would be required for both frontend and backend aspects if applicable, or for database interactions, API development, UI implementation, etc.
+- **Aim for multiple tasks per user story**, covering various aspects of its implementation. For example:
+    - If a user story is "As a user, I want to register an account", tasks might include: "Implement user registration API endpoint", "Develop frontend registration form validation", "Create user model in database", "Handle password hashing".
+- Tasks should be atomic and clearly defined, directly supporting the user story's completion.
 
 **CRITICAL INSTRUCTION FOR OUTPUT FORMAT:**
 Your entire response MUST be a valid JSON object.
 DO NOT include any conversational text, introductions, conclusions, or explanations before or after the JSON.
-DO NOT include any markdown code block delimiters (e.g., ```json or ```) around the JSON.
+DO NOT include any markdown code block delimiters (e.g., ````json```` or `````) around the JSON.
 The JSON object MUST strictly follow the exact structure provided below. If a section or field cannot be extracted or is not present in the BRD, provide an empty string for string fields, 0 for number fields, or an empty array `[]` for array fields, but DO NOT omit the key itself.
 
-JSON Structure:
+JSON Structure (all literal curly braces now explicitly escaped for Python formatting):
 {{
   "project_summary": "A brief, high-level summary of the overall project's purpose and main goals, derived from the BRD.",
   "themes": [
@@ -37,21 +41,46 @@ JSON Structure:
           "description": "A description of the epic's purpose and the high-level functionality it aims to deliver.",
           "user_stories": [
             {{
-              "story_id": "Unique identifier for the user story (e.g., 'US-001'). If not explicitly stated in the BRD, infer or generate a simple, sequential ID (e.g., 'Story-1', 'US-2') maintaining a consistent numbering scheme.",
+              "story_id": "Unique identifier for the user story (e.g., 'US-001', 'AUTH-US-001'). If not explicitly stated in the BRD, infer or generate a simple, sequential and descriptive ID (e.g., 'Story-1', 'US-2') maintaining a consistent numbering scheme.",
               "title": "The user story following the 'As a [type of user], I want to [goal], so that [reason/benefit]' format. Extract this directly or infer it accurately and precisely from the BRD text.",
+              "description": "A more detailed description of what the user story entails, expanding on the title if necessary.",
               "acceptance_criteria": [
                 "Specific, verifiable conditions that MUST be met for the user story to be considered complete and successful. Focus on testable outcomes. List each criterion as a separate string.",
                 "Criterion 2 (e.g., 'The system shall send an email notification upon successful registration.')"
               ],
               "tasks": [
-                "Detailed, concrete technical or operational steps required to implement this specific user story. These tasks should be directly actionable and granular enough for development. List each task as a separate string.",
-                "Task 2 (e.g., 'Develop API endpoint for user registration.')"
+                "Detailed, concrete, and highly actionable technical or operational step required to implement this specific user story. Example: 'Develop API endpoint for user registration (POST /api/register)'.",
+                "Another detailed, concrete task. Example: 'Create 'User' model in database with fields: email, password_hash, username'.",
+                "Another detailed, concrete task. Example: 'Build React component for user registration form with client-side validation'."
               ]
             }}
           ]
         }}
       ]
     }}
+  ],
+  "key_features": [
+    "List of primary features mentioned in the BRD (e.g., 'User Authentication', 'Shopping Cart', 'Payment Gateway Integration')."
+  ],
+  "non_functional_requirements": {{
+    "performance": "e.g., 'System should handle 1000 concurrent users with < 2s response time.'",
+    "security": "e.g., 'Implement OAuth2 for authentication and data encryption at rest and in transit.'",
+    "scalability": "e.g., 'Designed to scale horizontally to support future user growth.'",
+    "usability": "e.g., 'Intuitive user interface, 90% task completion rate for new users.'",
+    "maintainability": "e.g., 'Modular codebase with clear separation of concerns and comprehensive documentation.'",
+    "compliance": "e.g., 'GDPR and CCPA compliant for user data handling.'"
+  }},
+  "technical_considerations": {{
+    "current_systems_integration": "Any existing systems or APIs that need to be integrated (e.g., 'Integrate with existing CRM via REST API').",
+    "data_migration": "Details on data migration requirements from old systems to new (e.g., 'Migrate existing customer data from SQL Server to MongoDB').",
+    "infrastructure_requirements": "Specific server, database, or cloud needs (e.g., 'Deploy on AWS Lambda with API Gateway and DynamoDB')."
+  }},
+  "risk_assessment": [
+    "Potential risk 1 (e.g., 'API rate limits from third-party payment gateway').",
+    "Potential risk 2 (e.g., 'Security vulnerabilities if not properly tested')."
+  ],
+  "stakeholders": [
+    "List of key stakeholders involved in the project (e.g., 'Product Owner', 'UX Designer', 'Backend Developers')."
   ]
 }}
 
