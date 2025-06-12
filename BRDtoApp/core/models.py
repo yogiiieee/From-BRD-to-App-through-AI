@@ -20,7 +20,7 @@ class Project(models.Model):
     #                         help_text="The Business Requirement Document this project was generated from.")
     
     # Link to the user who initiated the generation
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='generated_projects',
+    owner = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='generated_projects',
                               help_text="The user who initiated this project generation.")
 
     # Status of the generation process

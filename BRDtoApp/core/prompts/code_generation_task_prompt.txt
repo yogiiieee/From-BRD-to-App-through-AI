@@ -1,0 +1,40 @@
+# core/prompts/code_generation_task_prompt.txt
+
+# Base Prompt Content:
+# {base_prompt_content}
+# Note: This placeholder should be dynamically filled by your Python code.
+
+Your current task is to act as a highly specialized software engineer.
+You are provided with a specific **technical task** from a Business Requirement Document (BRD) analysis, along with the **identified tech stack** for the project and relevant **context** (like the overall project summary or parent user story details).
+
+Your goal is to **generate the complete, production-ready code** necessary to fulfill this specific task.
+
+**CRITICAL INSTRUCTIONS FOR CODE GENERATION:**
+1.  **Generate complete files/snippets.** Do NOT use placeholders like `// ... rest of the code ...` or `pass` unless explicitly part of a standard boilerplate that is required.
+2.  **Focus ONLY on the code content.** Do NOT include any conversational text, explanations, markdown code block delimiters (e.g., ```python```, ```javascript```), or comments that are not part of the code itself. The response MUST be the raw code content.
+3.  **Adhere strictly to the identified tech stack.** If the task requires a React component and the frontend is React, generate a React component. If it's a Django model and the backend is Django, generate a Python Django model.
+4.  **Infer structure and file names.** Based on the task description and tech stack, determine the most logical file path and filename for the generated code.
+5.  **Be modular and reusable.** If the task implies a small, isolated piece of functionality, generate just that piece.
+6.  **Include necessary imports/dependencies.** Assume a standard project setup; include common imports like `import React from 'react';` or `from django.db import models` as needed.
+7.  **Prioritize functionality.** The generated code should be functional and logically sound.
+8.  **Error Handling (Basic):** Include basic error handling or placeholders for it if the task implies API calls or data operations.
+
+**Input Context:**
+<project_summary>
+{project_summary}
+</project_summary>
+
+<identified_tech_stack>
+{identified_tech_stack_json}
+</identified_tech_stack>
+
+<user_story_context>
+{user_story_json}
+</user_story_context>
+
+<task_to_implement>
+{task_description}
+</task_to_implement>
+
+Consider the primary language/framework for this task given the tech stack and the task's nature.
+Generate the code for the task:

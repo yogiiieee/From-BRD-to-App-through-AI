@@ -6,6 +6,7 @@ import re
 import io
 import zipfile
 from django.conf import settings
+from django.shortcuts import render
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt # Use this for AJAX POST if not using CSRF token in JS
 from django.views.decorators.http import require_POST, require_GET
@@ -15,7 +16,7 @@ from django.contrib.auth.decorators import login_required # If you want to requi
 # Import your core app's models and services
 from .models import Project, GeneratedFile
 # Ensure these imports are correct. Added identify_tech_stack
-from .services.gemini_client import analyze_brd, generate_text, identify_tech_stack 
+from .services.gemini_client import analyze_brd, generate_text, identify_tech_stack, generate_code_for_task
 from .services.file_writer import FileWriter
 from .generators.python import PythonGenerator
 from .generators.react_node import ReactNodeGenerator
@@ -109,25 +110,25 @@ def generate_project_view(request):
         'generated_files_info': []
     }
 
-    if not file_writer or not python_generator or not react_node_generator:
-        response_data['message'] = "Server generators not initialized. Please contact support."
-        logger.error("Attempted project generation with uninitialized generators.")
+    if not file_writer or not gemini_client_instance: # Check gemini_client_instance too
+        response_data['message'] = "Server generators/AI service not initialized. Please contact support."
+        logger.error("Attempted project generation with uninitialized generators/AI service.")
         return JsonResponse(response_data, status=500)
 
     try:
         request_body = json.loads(request.body)
         analysis_data = request_body.get('analysis_data')
-        # NEW: Get identified tech stack from the request
         identified_tech_stack = request_body.get('identified_tech_stack') 
+
+        # Ensure analysis_data and identified_tech_stack are present
+        if not analysis_data or not identified_tech_stack:
+            response_data['message'] = "Missing analysis data or identified tech stack for project generation."
+            return JsonResponse(response_data, status=400)
 
         project_name_from_brd = analysis_data.get('project_summary', 'Untitled Project')
         user_provided_project_name = request_body.get('project_name')
         final_project_name = user_provided_project_name if user_provided_project_name else project_name_from_brd
         
-        if not analysis_data or not identified_tech_stack: # NEW: Ensure tech stack is provided
-            response_data['message'] = "Missing analysis data or identified tech stack for project generation."
-            return JsonResponse(response_data, status=400)
-
         logger.info(f"Initiating project generation for: {final_project_name} with tech stack: {identified_tech_stack}")
 
         project = Project.objects.create(
@@ -147,91 +148,74 @@ def generate_project_view(request):
         files_to_write_to_disk = []
         generated_file_models = []
 
-        # --- ORCHESTRATION LOGIC (NOW INFORMED BY IDENTIFIED TECH STACK) ---
-        # Example: Generate Django Models from User Stories if backend is Django
-        if identified_tech_stack.get('backend', '').lower() == 'django':
-            themes = analysis_data.get('themes', [])
-            for theme in themes:
-                for epic in theme.get('epics', []):
-                    for user_story in epic.get('user_stories', []):
-                        if "model" in user_story.get('title', '').lower() or \
-                           "data structure" in user_story.get('title', '').lower() or \
-                           any("database" in task.lower() for task in user_story.get('tasks', [])):
-                            
-                            logger.info(f"Generating Django model for story: {user_story.get('story_id')}")
-                            try:
-                                model_data = python_generator.generate_django_model(
-                                    user_story, 
-                                    {'project_summary': analysis_data.get('project_summary')}
-                                )
-                                if model_data and model_data.get('content'):
-                                    files_to_write_to_disk.append(model_data)
-                                    generated_file_models.append(
-                                        GeneratedFile(
-                                            project=project,
-                                            file_path=model_data['file_path'],
-                                            file_type=model_data['language']
-                                        )
-                                    )
-                            except Exception as gen_e:
-                                logger.error(f"Failed to generate Django model for {user_story.get('story_id')}: {gen_e}")
+        # --- GENERATE CODE FOR EACH TASK ---
+        themes = analysis_data.get('themes', [])
+        for theme in themes:
+            for epic in theme.get('epics', []):
+                for user_story in epic.get('user_stories', []):
+                    # Pass the *entire user_story* as context for generating tasks within it
+                    for task_description in user_story.get('tasks', []):
+                        logger.info(f"Attempting to generate code for task: '{task_description}' (User Story ID: {user_story.get('story_id', 'N/A')})")
+                        
+                        code_generation_result = gemini_client_instance.generate_code_for_task(
+                            project_summary=analysis_data.get('project_summary', ''),
+                            identified_tech_stack=identified_tech_stack,
+                            user_story_context=user_story, # Pass the full user story as context
+                            task_description=task_description
+                        )
 
-        # Example: Generate React Components if frontend is React
-        if identified_tech_stack.get('frontend', '').lower() == 'react':
-            themes = analysis_data.get('themes', [])
-            for theme in themes:
-                for epic in theme.get('epics', []):
-                    for user_story in epic.get('user_stories', []):
-                        if "interface" in user_story.get('title', '').lower() or \
-                           "UI" in user_story.get('title', '').lower() or \
-                           "page" in user_story.get('title', '').lower():
-                            
-                            logger.info(f"Generating React component for story: {user_story.get('story_id')}")
-                            try:
-                                react_component_data = react_node_generator.generate_react_component(
-                                    user_story,
-                                    {'ui_description': user_story.get('title', '')},
-                                    {'project_summary': analysis_data.get('project_summary')}
+                        if code_generation_result and not code_generation_result.get('error'):
+                            files_to_write_to_disk.append({
+                                'file_path': code_generation_result['file_path'],
+                                'content': code_generation_result['content'],
+                                'language': code_generation_result['language']
+                            })
+                            generated_file_models.append(
+                                GeneratedFile(
+                                    project=project,
+                                    file_path=code_generation_result['file_path'],
+                                    file_type=code_generation_result['language']
                                 )
-                                if react_component_data and react_component_data.get('content'):
-                                    files_to_write_to_disk.append(react_component_data)
-                                    generated_file_models.append(
-                                        GeneratedFile(
-                                            project=project,
-                                            file_path=react_component_data['file_path'],
-                                            file_type=react_component_data['language']
-                                        )
-                                    )
-                            except Exception as gen_e:
-                                logger.error(f"Failed to generate React component for {user_story.get('story_id')}: {gen_e}")
+                            )
+                            logger.info(f"Successfully generated code for task: '{task_description}' into {code_generation_result['file_path']}")
+                        else:
+                            logger.warning(f"Failed to generate code for task: '{task_description}'. Details: {code_generation_result.get('details', 'Unknown error')}")
+                            # You might want to store failed tasks or notify the user
+
 
         # --- Initial project structure (base files based on identified tech stack) ---
         # This part should also be dynamic based on tech stack
         base_files = [
-            {'file_path': 'README.md', 'content': f"# {project.name}\n\nGenerated with {identified_tech_stack.get('frontend', 'N/A')} frontend and {identified_tech_stack.get('backend', 'N/A')} backend.", 'language': 'markdown'},
+            {'file_path': 'README.md', 'content': f"# {project.name}\n\nGenerated with {identified_tech_stack.get('frontend', 'N/A')} frontend and {identified_tech_stack.get('backend', 'N/A')} backend. Additional generated code for tasks is in relevant subdirectories.", 'language': 'markdown'},
         ]
+        
+        # Add basic project structure files based on tech stack if they don't overlap with generated tasks
         if identified_tech_stack.get('backend', '').lower() == 'node.js':
-            base_files.append({'file_path': 'package.json', 'content': '{"name": "node-app", "version": "1.0.0", "scripts": {"start": "node index.js"}, "dependencies": {"express": "^4.17.1"}}', 'language': 'json'})
-            base_files.append({'file_path': 'index.js', 'content': '// Basic Node.js server setup\nconst express = require("express");\nconst app = express();\nconst PORT = process.env.PORT || 3000;\n\napp.get("/", (req, res) => {\n  res.send("Hello from Node.js Backend!");\n});\n\napp.listen(PORT, () => {\n  console.log(`Node.js server listening on port ${PORT}`);\n});', 'language': 'javascript'})
+            files_to_write_to_disk.append({'file_path': 'package.json', 'content': '{\n  "name": "node-app",\n  "version": "1.0.0",\n  "scripts": {\n    "start": "node index.js"\n  },\n  "dependencies": {\n    "express": "^4.17.1"\n  }\n}', 'language': 'json'})
+            files_to_write_to_disk.append({'file_path': 'index.js', 'content': '// Basic Node.js server setup\nconst express = require("express");\nconst app = express();\nconst PORT = process.env.PORT || 3000;\n\napp.get("/", (req, res) => {\n  res.send("Hello from Node.js Backend!");\n});\n\napp.listen(PORT, () => {\n  console.log(`Node.js server listening on port ${PORT}`);\n});', 'language': 'javascript'})
         elif identified_tech_stack.get('backend', '').lower() == 'django':
-            # For Django, you'd generate manage.py, settings.py, urls.py etc.
-            # This is complex and usually requires more specialized scaffolding.
-            base_files.append({'file_path': 'backend/README.md', 'content': 'Django backend will go here.', 'language': 'markdown'})
+            # Simplified for now, full Django setup is complex scaffolding
+            files_to_write_to_disk.append({'file_path': 'backend/README.md', 'content': 'Django backend will go here. Models and views generated per task.', 'language': 'markdown'})
         
         if identified_tech_stack.get('frontend', '').lower() == 'react':
-            base_files.append({'file_path': 'frontend/package.json', 'content': '{"name": "react-app", "version": "0.1.0", "private": true, "dependencies": {"react": "^18.2.0", "react-dom": "^18.2.0"}}', 'language': 'json'})
-            base_files.append({'file_path': 'frontend/src/App.js', 'content': 'import React from "react";\n\nfunction App() {\n  return (\n    <div className="App">\n      <header className="App-header">\n        <p>Hello from React Frontend!</p>\n      </header>\n    </div>\n  );\n}\n\nexport default App;', 'language': 'javascript'})
-            base_files.append({'file_path': 'frontend/public/index.html', 'content': '<!DOCTYPE html>\n<html lang="en">\n<head><title>React App</title></head><body><div id="root"></div><script src="../src/index.js"></script></body></html>', 'language': 'html'})
+            files_to_write_to_disk.append({'file_path': 'frontend/package.json', 'content': '{\n  "name": "react-app",\n  "version": "0.1.0",\n  "private": true,\n  "dependencies": {\n    "react": "^18.2.0",\n    "react-dom": "^18.2.0"\n  },\n  "devDependencies": {\n    "@vitejs/plugin-react": "^4.0.0",\n    "vite": "^4.0.0"\n  },\n  "scripts": {\n    "start": "vite",\n    "build": "vite build",\n    "preview": "vite preview"\n  }\n}', 'language': 'json'})
+            files_to_write_to_disk.append({'file_path': 'frontend/src/App.jsx', 'content': 'import React from "react";\n\nfunction App() {\n  return (\n    <div className="App">\n      <header className="App-header">\n        <p>Hello from React Frontend!</p>\n        {/* AI generated components will be integrated here */}\n      </header>\n    </div>\n  );\n}\n\nexport default App;', 'language': 'javascript'})
+            files_to_write_to_disk.append({'file_path': 'frontend/src/main.jsx', 'content': 'import React from \'react\';\nimport ReactDOM from \'react-dom/client\';\nimport App from \'./App.jsx\';\nimport \'./index.css\'; // Assuming you\'ll have a basic CSS file\n\nReactDOM.createRoot(document.getElementById(\'root\')).render(\n  <React.StrictMode>\n    <App />\n  </React.StrictMode>,\n);\n', 'language': 'javascript'})
+            files_to_write_to_disk.append({'file_path': 'frontend/index.html', 'content': '<!DOCTYPE html>\n<html lang="en">\n  <head>\n    <meta charset="UTF-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n    <title>React App</title>\n  </head>\n  <body>\n    <div id="root"></div>\n    <script type="module" src="/src/main.jsx"></script>\n  </body>\n</html>\n', 'language': 'html'})
+            files_to_write_to_disk.append({'file_path': 'frontend/src/index.css', 'content': '/* Basic CSS for React App */\nbody {\n  margin: 0;\n  font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Roboto\', \'Oxygen\',\n    \'Ubuntu\', \'Cantarell\', \'Fira Sans\', \'Droid Sans\', \'Helvetica Neue\',\n    sans-serif;\n  -webkit-font-smoothing: antialiased;\n  -moz-osx-font-smoothing: grayscale;\n}\n\n#root {\n  display: flex;\n  justify-content: center;\n  align-items: center;\n  min-height: 100vh;\n  background-color: #f0f2f5;\n}\n', 'language': 'css'})
+
         elif identified_tech_stack.get('frontend', '').lower() == 'plain html/css/js':
-            base_files.append({'file_path': 'frontend/index.html', 'content': '<!DOCTYPE html>\n<html lang="en">\n<head><meta charset="UTF-8"><title>Plain HTML App</title></head><body><h1>Hello from Plain HTML!</h1><script src="script.js"></script></body></html>', 'language': 'html'})
-            base_files.append({'file_path': 'frontend/script.js', 'content': 'console.log("Hello from plain JavaScript!");', 'language': 'javascript'})
+            files_to_write_to_disk.append({'file_path': 'frontend/index.html', 'content': '<!DOCTYPE html>\n<html lang="en">\n<head><meta charset="UTF-8"><title>Plain HTML App</title></head><body><h1>Hello from Plain HTML!</h1><script src="script.js"></script></body></html>', 'language': 'html'})
+            files_to_write_to_disk.append({'file_path': 'frontend/script.js', 'content': 'console.log("Hello from plain JavaScript!");', 'language': 'javascript'})
 
-
-        files_to_write_to_disk.extend(base_files)
-        generated_file_models.extend([
-            GeneratedFile(project=project, file_path=f['file_path'], file_type=f['language'])
-            for f in base_files
-        ])
+        # Record base files in GeneratedFile models
+        for f in base_files:
+             # Check if this file path is already covered by a generated task file
+            if not any(item['file_path'] == f['file_path'] for item in files_to_write_to_disk):
+                files_to_write_to_disk.append(f)
+                generated_file_models.append(
+                    GeneratedFile(project=project, file_path=f['file_path'], file_type=f['language'])
+                )
 
 
         try:
@@ -341,3 +325,23 @@ def download_project_zip(request, project_id):
     zip_buffer.seek(0)
     response.write(zip_buffer.read())
     return response
+
+@require_GET
+# @login_required
+def project_preview_view(request, project_id):
+    """
+    Renders the project preview page for a given project ID.
+    """
+    try:
+        project = Project.objects.get(id=project_id)
+        context = {
+            'project_id': project_id,
+            'project_name': project.name
+        }
+        return render(request, 'website/project_preview.html', context)
+    except Project.DoesNotExist:
+        return JsonResponse({'error': 'Project not found.'}, status=404)
+    except Exception as e:
+        logger.exception(f"Error rendering project preview for ID {project_id}: {e}")
+        return JsonResponse({'error': 'An internal server error occurred.'}, status=500)
+

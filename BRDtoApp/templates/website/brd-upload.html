@@ -275,16 +275,15 @@
                             <span class="text-yellow-600 dark:text-yellow-400 font-bold">Medium</span>
                         </div>
                     </div>
-                    <button id="generateAppBtn" class="w-full mt-6 px-6 py-3 gradient-bg text-white rounded-xl font-semibold hover:shadow-lg transform hover:scale-105 transition-all duration-300">
-                        Generate App Prototype
-                    </button>
                 </div>
                 <!-- NEW: Container to display identified tech stack, placed directly after analysisResults -->
                 <div id="techStackDisplay" class="mt-6 hidden">
                     <!-- Content will be dynamically injected here by JavaScript -->
                 </div>
             </div>
-
+            <button id="generateAppBtn" class="w-full mt-6 px-6 py-3 gradient-bg text-white rounded-xl font-semibold hover:shadow-lg transform hover:scale-105 transition-all duration-300 hidden">
+                Generate App Prototype
+            </button>
             <!-- Live Preview & Project Management -->
             <div class="lg:col-span-1">
                 <!-- Project Dashboard -->
@@ -546,7 +545,9 @@
         const filesContainer = document.getElementById('filesContainer'); // Existing from your code
         const analysisResults = document.getElementById('analysisResults');
         const livePreview = document.getElementById('livePreview'); // Existing from your code
-        const generateAppBtn = document.getElementById('generateAppBtn'); // Your current HTML button for generation
+        
+        
+        const generateAppBtn = document.getElementById('generateAppBtn');
     
         // NEW elements for tech stack display and final app generation button (MUST exist in HTML)
         const techStackDisplay = document.getElementById('techStackDisplay'); // Make sure you have this div in HTML
@@ -796,15 +797,15 @@
         }
     
         // NEW: Function to handle the actual application generation
-        async function generateApplication(analysisData, brdFilename, identifiedTechStack) { 
+        async function generateApplication(analysisData, brdFilename, identifiedTechStack) { // Accepts identifiedTechStack
             showLoadingStateForGeneration();
-    
+
             const dataToSend = {
                 analysis_data: analysisData,
                 project_name: `App from ${brdFilename.split('.')[0] || 'UntitledBRD'}`,
                 identified_tech_stack: identifiedTechStack, // Pass the identified tech stack to the backend
             };
-    
+
             try {
                 const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
                 const response = await fetch('/core/generate-project/', { // Call backend for generation
@@ -815,18 +816,21 @@
                     },
                     body: JSON.stringify(dataToSend)
                 });
-    
+
                 hideLoadingStateForGeneration(); // Hide generation spinner
-    
+
                 const result = await response.json();
-    
+
                 if (response.ok && result.status === 'success') {
                     showNotification('Application generation completed successfully!', 'success');
-                    // Assuming displayGeneratedProjectUI exists and handles showing project files/preview
-                    // You might need to add or adapt this function if it's not present.
-                    // For now, I'll provide a minimal placeholder for displayGeneratedProjectUI if not exists.
-                    displayGeneratedProjectUI(result.project_id); 
-    
+                    // REDIRECT TO THE NEW PROJECT PREVIEW PAGE
+                    if (result.project_id) {
+                        window.location.href = `/core/project-preview/${result.project_id}/`;
+                    } else {
+                        showNotification('Project generated but no ID received for preview.', 'warning');
+                        console.warn('Project generated but no project_id in response:', result);
+                    }
+
                 } else {
                     showNotification(result.message || 'Application generation failed.', 'error');
                     displayError('App Generation Failed', result.message || 'Application generation failed.', result.raw_ai_response || null);
@@ -1207,7 +1211,7 @@
                 }
             });
     
-            // Profile Dropdown Initialization (Your existing code)
+            // Profile Dropdown Initialization
             const profileBtn = document.getElementById('profileBtn');
             const profileDropdown = document.getElementById('profileDropdown');
             if (profileBtn && profileDropdown) { // Added null checks for safety
@@ -1225,10 +1229,10 @@
             }
     
     
-            // Set initial progress (Your existing code)
+            // Set initial progress
             updateProgressStep(1, 'active');
             
-            // Add some interactive hover effects (Your existing code)
+            // Add some interactive hover effects
             const cards = document.querySelectorAll('.neo-card');
             cards.forEach(card => {
                 card.addEventListener('mouseenter', () => {
@@ -1239,7 +1243,7 @@
                 });
             });
             
-            // Add click effect to buttons (Your existing code)
+            // Add click effect to buttons
             const buttons = document.querySelectorAll('button');
             buttons.forEach(button => {
                 button.addEventListener('click', (e) => {
@@ -1268,7 +1272,7 @@
             if (techStackDisplay) techStackDisplay.classList.add('hidden'); // NEW: Ensure hidden on load
             if (generateAppFinalBtn) generateAppFinalBtn.classList.add('hidden'); // NEW: Ensure hidden on load
             
-            // Chatbot Initialization (Your existing code)
+            // Chatbot Initialization 
             let chatResponses = [
                 "For better BRD analysis, include clear user stories with acceptance criteria.",
                 "Make sure to specify your tech stack preferences and any constraints.",

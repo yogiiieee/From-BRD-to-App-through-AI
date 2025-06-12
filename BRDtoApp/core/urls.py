@@ -20,4 +20,7 @@ urlpatterns = [
 
     # URL for triggering tech stack identification
     path('identify-tech-stack/', views.identify_tech_stack_view, name='identify_tech_stack'),
+
+    # URL for project preview
+    path('project-preview/<int:project_id>/', views.project_preview_view, name='project_preview'),
 ]
