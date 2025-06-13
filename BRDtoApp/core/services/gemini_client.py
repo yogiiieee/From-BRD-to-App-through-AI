@@ -1,17 +1,23 @@
+# core/services/gemini_client.py
+import string
 import json
 import logging
+from django.conf import settings
 import os
-import re # ADDED: Import the 're' module for regular expressions
+import re
+import requests
 
 from django.conf import settings
-from django.utils.text import slugify # ADDED: Import slugify
-
-# Assuming this is how your gemini client is initialized
-# from google.cloud import aiplatform # If using Google Cloud Vertex AI SDK directly
-# Or just rely on direct fetch, as per Canvas environment instructions
-# For now, we'll assume generate_text handles the underlying API call
+from django.utils.text import slugify
 
 logger = logging.getLogger(__name__)
+
+# --- Gemini API Configuration ---
+# DELETE THIS LINE: GEMINI_API_KEY = settings.GEMINI_API_KEY
+# The GEMINI_API_KEY will now be accessed directly from `settings.GEMINI_API_KEY` inside functions.
+
+GEMINI_MODEL_NAME = "gemini-1.5-flash" 
+GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL_NAME}:generateContent"
 
 # --- Helper to load prompt templates ---
 def load_prompt_template(template_name):
@@ -27,223 +33,152 @@ def load_prompt_template(template_name):
 # --- Helper to extract JSON from AI's markdown response ---
 def _extract_json_from_markdown(text_content):
     """
-    Extracts a JSON string from a markdown code block.
-    Handles cases where AI might wrap JSON in ```json...``` or just ```...```.
+    More robust JSON extractor that handles:
+    - Multiple JSON objects
+    - Markdown wrappers
+    - Trailing garbage
     """
-    # Pattern to find a JSON block, optionally with 'json' language specifier
-    match = re.search(r'```json\n(.*?)```', text_content, re.DOTALL)
-    if not match:
-        match = re.search(r'```\n(.*?)```', text_content, re.DOTALL)
-    if match:
-        json_str = match.group(1).strip()
-        try:
-            return json.loads(json_str)
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to decode JSON from extracted markdown block: {e}")
-            logger.debug(f"Attempted to decode: {json_str}")
-            raise ValueError(f"AI returned malformed JSON within markdown block: {e}")
+    logger.debug(f"Raw AI response text: {text_content[:200]}...")
     
-    # If no markdown block, try to parse the whole text as JSON (e.g., if AI just returned raw JSON)
+    # First try direct JSON parse
     try:
-        return json.loads(text_content.strip())
+        result = json.loads(text_content.strip())
+        logger.debug(f"Successfully parsed direct JSON: {result}")
+        return result
+    except json.JSONDecodeError:
+        logger.debug("Direct JSON parse failed, trying other methods...")
+    
+    # Try extracting from markdown code blocks
+    json_candidates = re.findall(r'(?s)```(?:json)?\n(.*?)\n```', text_content)
+    for candidate in json_candidates:
+        try:
+            result = json.loads(candidate.strip())
+            logger.debug(f"Successfully extracted from markdown: {result}")
+            return result
+        except json.JSONDecodeError:
+            logger.debug("Markdown JSON extraction failed for candidate")
+            continue
+    
+    # Try finding JSON-like objects without markdown
+    json_like = re.search(r'\{.*?\}', text_content)
+    if json_like:
+        try:
+            result = json.loads(json_like.group(0))
+            logger.debug(f"Successfully extracted from text: {result}")
+            return result
+        except json.JSONDecodeError:
+            logger.debug("Text JSON extraction failed")
+            pass
+    
+    # If all else fails, try to clean up the text and parse again
+    cleaned = re.sub(r'[^\{\}\[\]\:\,\"\w\s]', '', text_content)
+    try:
+        result = json.loads(cleaned.strip())
+        logger.debug(f"Successfully parsed cleaned text: {result}")
+        return result
     except json.JSONDecodeError as e:
-        logger.error(f"Failed to decode JSON from raw text content: {e}")
-        logger.debug(f"Attempted to decode raw: {text_content.strip()}")
-        raise ValueError(f"AI did not return valid JSON: {e}")
+        logger.error(f"Could not extract valid JSON: {str(e)}")
+        logger.error(f"Raw text content: {text_content[:500]}...")
+        raise ValueError(f"Could not extract valid JSON: {str(e)}")
 
-# --- Core AI Interaction Function (Simplified for Canvas Environment) ---
-# In a real Django setup, you'd configure a robust Gemini client here.
-# For Canvas, we simulate direct API call as instructed.
+# --- Core AI Interaction Function ---
 def generate_text(prompt_content, parse_json=True):
     """
-    Sends a prompt to the Gemini 2.0 Flash model and returns the text response.
+    Sends a prompt to the Gemini model via API and returns the response.
     
     Args:
-        prompt_content (str): The prompt string to send to the model.
-        parse_json (bool): If True, attempts to parse the response as JSON.
-                           If False, returns raw text.
-
+        prompt_content (str): The prompt to send to the model
+        parse_json (bool): Whether to try parsing the response as JSON
+    
     Returns:
-        str or dict: The AI's response, either raw text or parsed JSON.
+        dict: The parsed JSON response if parse_json=True, otherwise raw text
+    
+    Raises:
+        ValueError: If API key is not configured
+        requests.exceptions.RequestException: If API request fails
+        json.JSONDecodeError: If response parsing fails
     """
-    # In a real application, you'd use a robust HTTP client like 'requests'
-    # and properly handle API keys and endpoint configuration.
-    # For the Canvas environment, the instructions specify a direct fetch call.
-    # The Python backend here assumes the 'generateContent' API is being
-    # invoked in a way that allows a direct result based on the prompt.
-    
-    # This is a placeholder for actual API call.
-    # In a real Django project, this would involve a POST request to Google's API.
-    # For now, we'll simulate a direct text generation or assume an underlying
-    # mechanism handles the API call and provides the result.
-    logger.info("Calling Gemini API (simulated/managed by environment)...")
-    
-    # Placeholder for actual API call, assuming successful response
-    # In a real setup:
-    # headers = { 'Content-Type': 'application/json' }
-    # payload = { "contents": [{ "role": "user", "parts": [{ "text": prompt_content }] }] }
-    # if parse_json:
-    #     payload["generationConfig"] = { "responseMimeType": "application/json", "responseSchema": { ... } }
-    # response = requests.post(API_URL, headers=headers, data=json.dumps(payload))
-    # response.raise_for_status()
-    # result = response.json()
-    # text = result['candidates'][0]['content']['parts'][0]['text']
+    # Verify API key is configured and valid
+    api_key = settings.GEMINI_API_KEY
+    if not api_key:
+        logger.error("Gemini API key is not configured in settings")
+        raise ValueError("Gemini API key is not configured. Please set GEMINI_API_KEY in your environment variables")
 
-    # For the purpose of interaction in this environment,
-    # we assume `_call_gemini_api` (or similar) handles the actual API communication
-    # and returns the raw string, which we then post-process for JSON if needed.
-    
-    # Assuming _call_gemini_api exists in this context or is handled externally.
-    # For strict adherence to previous instructions, we will assume `generate_text`
-    # directly performs the fetch operation and returns the result,
-    # or that the environment's `generate_text` *function itself* calls the API.
-    
-    # If the user's setup needs an actual API call, we'd provide it here.
-    # Given the recent error, it seems the Python code runs. So let's assume
-    # an internal mechanism makes the API call and we just receive the content.
-    
-    # This part is a placeholder for the actual API call logic.
-    # The critical part is how this function *receives* the AI's response.
-    # If this is being run in an environment where generate_text is pre-defined
-    # to call the Gemini API, then the following is conceptual:
+    # Log API key length (without showing actual key)
+    logger.info(f"Using Gemini API key of length: {len(api_key)}")
 
-    # For demonstration/testing, a mocked response might be needed if not actually calling.
-    # For a real backend, this would be `requests.post` call as described above.
-    
-    # Given the tracebacks, it seems this is where the AI response should come from.
-    # We will assume a mechanism like `_call_gemini_api_internal` provides the raw text.
-    # For this specific context, where this is `gemini_client.py` and the error is `NameError`,
-    # the issue is purely the Python function's scope.
-    
-    # To fix NameError and ensure it runs:
-    # This function expects to *receive* a response from an AI call.
-    # If you have a separate HTTP client setup, this is where it goes.
-    # Since we don't have that context, let's make it return a dummy for testing
-    # if it's called directly without a real API implementation here.
-    # However, the error suggests it's being called and then hitting slugify.
-    
-    # Let's assume an actual API call happens *elsewhere* and `generate_text`
-    # somehow obtains the AI's raw string response.
-    # For now, we will assume it connects to a mechanism that returns the text.
-    # The key is to correctly handle the prompt and the expected return type.
-    
-    # Re-implementing simplified call based on latest understanding of Canvas environment:
-    # This `generate_text` function should perform the API call itself, or
-    # be an abstraction over a part of your existing backend that does it.
-    
-    # The simplest way to integrate with the Canvas's Gemini API call mechanism
-    # within a Python file is to assume `generate_text` directly handles it.
-    # However, the Canvas instruction for Gemini API calls specifically mention `fetch`
-    # in the context of *JavaScript*.
-    
-    # In a Django backend, you would typically use Python's `requests` library.
-    # Since the full `requests` setup was not provided, I'll keep this as a conceptual
-    # placeholder for the API call, and focus on the prompt formatting and post-processing.
-    
-    # For debugging purposes, if you need a quick test without actual API calls,
-    # you might temporarily return a hardcoded string here.
-    
-    # The previous code (which was causing NameError) implies this function *was*
-    # running and getting *some* AI response (even if problematic).
-    # So, we'll assume `_call_gemini_api_internal(prompt_content)` is how the raw
-    # response string is obtained.
-    
-    # If you need the full requests-based API call here, please specify.
-    # For now, let's focus on the `slugify` import.
-    
-    # Placeholder for the actual AI response. This is where your AI integration
-    # (e.g., using Vertex AI SDK or requests to Google API) would go.
-    raw_ai_response_text = "" 
-    # Example raw_ai_response_text = "```json\n{\"project_summary\": \"...\"}```" if parse_json else "Some code here"
+    # Test if API key is properly formatted
+    if not api_key.startswith('AIzaSy'):
+        logger.error("Gemini API key does not appear to be in the correct format")
+        raise ValueError("Invalid Gemini API key format. Expected key to start with 'AIzaSy'")
 
-    # Placeholder for actual API call (using Python requests or similar)
-    # This part would fetch the real AI response.
-    # For testing, you might need to mock this or ensure your Django setup
-    # correctly routes and calls the AI.
-    
-    # For the context of this specific error, we focus on the Python execution.
-    # Let's assume an internal mechanism (or direct API call if implemented)
-    # will return the `raw_ai_response_text`.
-    
-    # As per typical Django setup, if this client is for backend operations,
-    # it *would* use `requests`. Let's put a minimal placeholder for that.
-    
-    # THIS IS WHERE YOUR ACTUAL API CALL LOGIC BELONGS
-    # import requests
-    # API_KEY = os.environ.get("GEMINI_API_KEY", "") # Or configured via settings
-    # API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-    # headers = {'Content-Type': 'application/json'}
-    # payload = { "contents": [{ "role": "user", "parts": [{ "text": prompt_content }] }] }
-    # try:
-    #     response = requests.post(f"{API_URL}?key={API_KEY}", headers=headers, data=json.dumps(payload))
-    #     response.raise_for_status() # Raise an exception for HTTP errors
-    #     result = response.json()
-    #     if result.get('candidates') and result['candidates'][0].get('content') and result['candidates'][0]['content'].get('parts'):
-    #         raw_ai_response_text = result['candidates'][0]['content']['parts'][0]['text']
-    #     else:
-    #         logger.error(f"Unexpected AI response structure: {result}")
-    #         raise ValueError("Unexpected AI response structure")
-    # except requests.exceptions.RequestException as req_e:
-    #     logger.error(f"API request failed: {req_e}")
-    #     raise ConnectionError(f"Failed to connect to AI API: {req_e}")
-    # except Exception as e:
-    #     logger.error(f"Error during AI API call: {e}")
-    #     raise e
+    headers = {
+        'Authorization': f'Bearer {api_key}',
+        'Content-Type': 'application/json',
+    }
 
-    # Since the immediate error is `NameError: slugify`,
-    # I'll provide the function assuming `raw_ai_response_text` gets populated.
-    # If the API call itself needs to be fleshed out, let me know.
-    
-    # For now, let's assume raw_ai_response_text is obtained from some AI call.
-    # For debugging the NameError, the content of raw_ai_response_text is less critical
-    # than the function's structure.
+    # Add API key to URL as query parameter as an alternative method
+    api_url = f"{GEMINI_API_URL}?key={api_key}"
 
-    # TEMPORARY MOCK FOR TESTING, REMOVE IN PRODUCTION IF YOU HAVE REAL API CALLS
-    if "Generate the code for the task" in prompt_content:
-        # Simple mock for code generation
-        raw_ai_response_text = "console.log('Generated code for task: This is a test');"
-    else:
-        # Simple mock for JSON analysis
-        raw_ai_response_text = """
-        ```json
-        {
-          "project_summary": "Mock Project Summary",
-          "themes": [
-            {
-              "theme_name": "Mock Theme",
-              "description": "Description of mock theme",
-              "epics": [
-                {
-                  "epic_name": "Mock Epic",
-                  "description": "Description of mock epic",
-                  "user_stories": [
-                    {
-                      "story_id": "MOCK-001",
-                      "title": "As a mock user, I want to see a mock feature so that I can verify setup.",
-                      "description": "This is a mock user story.",
-                      "acceptance_criteria": ["Mock criterion 1"],
-                      "tasks": ["Implement mock API endpoint", "Create mock UI component"]
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
-        ```
-        """
-    # END TEMPORARY MOCK
+    data = {
+        'contents': [{'parts': [{'text': prompt_content}]}]
+    }
+    
+    try:
+        logger.debug(f"Sending request to Gemini API with prompt length: {len(prompt_content)}")
+        # Try with both authentication methods
+        try:
+            # First try with Authorization header
+            response = requests.post(GEMINI_API_URL, headers=headers, json=data)
+            logger.debug(f"Response status code (header auth): {response.status_code}")
+            response.raise_for_status()
+            logger.info("Successfully authenticated with header method")
+        except requests.exceptions.HTTPError:
+            # If header method fails, try with API key in URL
+            logger.info("Header authentication failed, trying URL parameter method...")
+            response = requests.post(api_url, headers={'Content-Type': 'application/json'}, json=data)
+            logger.debug(f"Response status code (URL auth): {response.status_code}")
+            response.raise_for_status()
+            logger.info("Successfully authenticated with URL parameter method")
+        
+        response_data = response.json()
+        logger.debug(f"Raw response data: {response_data}")
+        
+        # Extract the actual content from Gemini's response structure
+        text_content = response_data['candidates'][0]['content']['parts'][0]['text']
+        logger.debug(f"Extracted text content: {text_content[:200]}...")
+        
+        if parse_json:
+            result = _extract_json_from_markdown(text_content)
+            logger.debug(f"Parsed JSON result: {result}")
+            return result
+        else:
+            return text_content
+            
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Gemini API request failed: {str(e)}", exc_info=True)
+        logger.error(f"Full response: {response.text if 'response' in locals() else 'No response'}")
+        raise
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse Gemini response as JSON: {str(e)}", exc_info=True)
+        logger.error(f"Response text: {response.text if 'response' in locals() else 'No response'}")
+        raise
+        logger.error(f"Failed to decode API response JSON: {json_e}", exc_info=True)
+        return {'error': True, 'message': f"Malformed JSON from AI API: {json_e}", 'raw_ai_response': response.text if 'response' in locals() else 'N/A'}
+    except Exception as e:
+        logger.error(f"An unexpected error occurred during AI API call: {e}", exc_info=True)
+        return {'error': True, 'message': f"An unexpected error occurred during AI API call: {e}", 'raw_ai_response': str(e)}
 
     if parse_json:
         try:
             return _extract_json_from_markdown(raw_ai_response_text)
         except ValueError as e:
-            logger.error(f"Failed to parse JSON response: {e}")
+            logger.error(f"Failed to parse JSON from AI's text response (expected JSON): {e}")
             return {'error': True, 'message': f"AI returned invalid JSON: {e}", 'raw_ai_response': raw_ai_response_text}
     else:
         return raw_ai_response_text
 
-# --- Gemini Client Interface Functions ---
+# --- Gemini Client Interface Functions (unchanged - they call generate_text) ---
 
 def analyze_brd(brd_content):
     """Analyzes BRD content using a prompt and returns structured JSON."""
@@ -251,67 +186,141 @@ def analyze_brd(brd_content):
         base_template_raw = load_prompt_template('base_prompt.txt')
         brd_analysis_template_raw = load_prompt_template('brd_analysis_prompt.txt')
 
-        # First, replace the base prompt content placeholder
         intermediate_prompt = brd_analysis_template_raw.replace(
             '{base_prompt_content}', base_template_raw
         )
         
-        # Then, format with the actual BRD content
         final_prompt = intermediate_prompt.format(
             parsed_text=brd_content
         )
         
         logger.info("Sending BRD analysis prompt to AI...")
         structured_data = generate_text(final_prompt, parse_json=True)
+
+        if structured_data and structured_data.get('error'):
+            return structured_data
+            
         return {'status': 'success', 'analysis_data': structured_data, 'raw_ai_response': json.dumps(structured_data), 'extracted_text': brd_content}
     except Exception as e:
         logger.error(f"Error during BRD analysis: {e}", exc_info=True)
         return {'status': 'error', 'message': f"Failed to analyze BRD due to an internal processing error: {e}", 'raw_ai_response': str(e)}
 
 def identify_tech_stack(analysis_data):
-    """Identifies the tech stack based on BRD analysis data."""
+    """
+    Identifies the tech stack based on BRD analysis data.
+    
+    Args:
+        analysis_data (str): JSON string containing BRD analysis data
+        
+    Returns:
+        dict: Parsed JSON response with tech stack information
+        
+    Raises:
+        ValueError: If API key is not configured or response parsing fails
+    """
+    logger.info("Starting tech stack identification...")
+    
+    # Load the tech stack identification prompt template
+    base_prompt = load_prompt_template('base_prompt.txt')
+    tech_stack_prompt = load_prompt_template('tech_stack_identification_prompt.txt')
+    
+    if not base_prompt or not tech_stack_prompt:
+        logger.error("Failed to load required prompt templates")
+        raise ValueError("Failed to load required prompt templates")
+    
     try:
-        base_template_raw = load_prompt_template('base_prompt.txt')
-        tech_stack_template_raw = load_prompt_template('tech_stack_identification_prompt.txt')
-
-        intermediate_prompt = tech_stack_template_raw.replace(
-            '{base_prompt_content}', base_template_raw
-        )
-
-        final_prompt = intermediate_prompt.format(
-            analysis_data_json=json.dumps(analysis_data, indent=2)
+        # Combine prompts with analysis data
+        full_prompt = tech_stack_prompt.replace(
+            '{{ ... }}', ''
+        ).replace(
+            '{{base_prompt_content}}', base_prompt
+        ).replace(
+            '{{analysis_data_json}}', json.dumps(analysis_data, indent=2)
         )
         
-        logger.info("Sending tech stack identification prompt to AI...")
-        tech_stack_data = generate_text(final_prompt, parse_json=True)
+        logger.debug(f"Tech stack prompt length: {len(full_prompt)} characters")
+        logger.debug(f"First 500 chars of prompt: {full_prompt[:500]}")
         
-        # MODIFIED: Gracefully get frontend/backend, defaulting to empty string if not present
-        frontend_tech = tech_stack_data.get('frontend', '')
-        backend_tech = tech_stack_data.get('backend', '')
+        # Generate response
+        raw_response = generate_text(full_prompt, parse_json=False)  # Get raw text first
+        logger.debug(f"Raw AI response: {raw_response[:500]}...")
+        
+        # Try multiple JSON parsing strategies
+        try:
+            # First try direct JSON parse
+            response = json.loads(raw_response.strip())
+            logger.debug("Successfully parsed direct JSON")
+        except json.JSONDecodeError:
+            logger.debug("Direct JSON parse failed, trying markdown extraction...")
+            # Try extracting from markdown code blocks
+            json_candidates = re.findall(r'(?s)```(?:json)?\n(.*?)\n```', raw_response)
+            for candidate in json_candidates:
+                try:
+                    response = json.loads(candidate.strip())
+                    logger.debug("Successfully extracted from markdown")
+                    break
+                except json.JSONDecodeError:
+                    logger.debug("Markdown JSON extraction failed for candidate")
+                    continue
+            else:  # If no valid JSON found in code blocks
+                logger.debug("No valid JSON found in code blocks, trying text extraction...")
+                # Try finding JSON-like objects without markdown
+                json_like = re.search(r'\{.*?\}', raw_response)
+                if json_like:
+                    try:
+                        response = json.loads(json_like.group(0))
+                        logger.debug("Successfully extracted from text")
+                    except json.JSONDecodeError:
+                        logger.debug("Text JSON extraction failed")
+                        raise ValueError("No valid JSON found in response")
+                else:
+                    raise ValueError("No JSON-like content found in response")
+        
+        # Validate response structure
+        if not isinstance(response, dict):
+            raise ValueError("AI response is not a dictionary")
+            
+        frontend_tech = response.get('frontend', {})
+        backend_tech = response.get('backend', {})
 
-        # Now, raise an error ONLY if BOTH are missing, or if the overall response is bad
-        if not frontend_tech and not backend_tech:
-            raise ValueError("AI response for tech stack is completely empty or malformed.")
-
-        return {'status': 'success', 'tech_stack': {'frontend': frontend_tech, 'backend': backend_tech}, 'raw_ai_response': json.dumps(tech_stack_data)}
+        logger.info(f"Identified tech stack: Frontend={frontend_tech}, Backend={backend_tech}")
+        
+        ans= {
+            'status': 'success',
+            'tech_stack': {
+                'frontend': frontend_tech,
+                'backend': backend_tech
+            },
+            'raw_ai_response': json.dumps(response)
+        }
+        print(ans)
+        return ans
+    except json.JSONDecodeError as je:
+        logger.error(f"Failed to decode AI response: {je}")
+        return {
+            'status': 'error',
+            'message': "AI returned invalid JSON format",
+            'raw_ai_response': str(je)
+        }
+    except ValueError as ve:
+        logger.error(f"Validation error: {ve}")
+        return {
+            'status': 'error',
+            'message': str(ve),
+            'raw_ai_response': json.dumps(tech_stack_response) if 'tech_stack_response' in locals() else 'N/A'
+        }
     except Exception as e:
-        logger.error(f"Error identifying tech stack: {e}", exc_info=True)
-        return {'status': 'error', 'message': f"Failed to identify tech stack: {e}", 'raw_ai_response': str(e)}
+        logger.error(f"Unexpected error: {e}", exc_info=True)
+        return {
+            'status': 'error',
+            'message': f"Unexpected error during tech stack identification: {str(e)}",
+            'raw_ai_response': str(e)
+        }
 
 
 def generate_code_for_task(project_summary, identified_tech_stack, user_story_context, task_description):
     """
     Generates code for a specific task based on project context and tech stack.
-    
-    Args:
-        project_summary (str): High-level summary of the project.
-        identified_tech_stack (dict): Dict like {"frontend": "React", "backend": "Node.js"}.
-        user_story_context (dict): The full user story dictionary related to this task.
-        task_description (str): The specific task string to generate code for.
-
-    Returns:
-        dict: A dictionary containing 'file_path', 'content', 'language', or an error dict.
-              Example: {'file_path': 'frontend/src/components/UserRegistration.jsx', 'content': '...', 'language': 'javascript'}
     """
     try:
         base_template_raw = load_prompt_template('base_prompt.txt')
@@ -329,11 +338,13 @@ def generate_code_for_task(project_summary, identified_tech_stack, user_story_co
         )
         
         logger.info(f"Generating code for task: {task_description}")
-        # Call generate_text to get the raw code content. Do NOT parse JSON here.
-        raw_code_content = generate_text(final_prompt, parse_json=False)
+        raw_code_content_or_error = generate_text(final_prompt, parse_json=False)
 
-        # --- Post-processing to determine file_path and language ---
-        
+        if isinstance(raw_code_content_or_error, dict) and raw_code_content_or_error.get('error'):
+            return raw_code_content_or_error
+
+        raw_code_content = raw_code_content_or_error
+
         file_path = "generated_code/unknown_file.txt"
         language = "plaintext"
 
@@ -346,7 +357,6 @@ def generate_code_for_task(project_summary, identified_tech_stack, user_story_co
             component_name_match = re.search(r'(?:create|build|develop|implement)\s+(.+?)\s+(?:component|form|ui|page)', task_lower)
             component_name = "GenericComponent"
             if component_name_match:
-                # Use slugify on the matched group to ensure it's URL-friendly, then format for CamelCase
                 slugged_name = slugify(component_name_match.group(1).strip())
                 component_name = "".join(word.capitalize() for word in slugged_name.split('-'))
             elif user_story_context.get('title'):
@@ -397,3 +407,26 @@ def generate_code_for_task(project_summary, identified_tech_stack, user_story_co
             'task_description': task_description,
             'raw_ai_response': locals().get('raw_code_content', 'N/A')
         }
+
+def validate_tech_stack_response(response):
+    """Validates the structure of tech stack responses"""
+    required_keys = {'frontend', 'backend'}
+    if not isinstance(response, dict):
+        raise ValueError("Response must be a dictionary")
+    
+    if not required_keys.issubset(response.keys()):
+        missing = required_keys - set(response.keys())
+        raise ValueError(f"Missing required keys: {missing}")
+    
+    if not all(isinstance(v, str) for v in response.values()):
+        raise ValueError("All values must be strings")
+    
+    # Additional content validation
+    invalid_values = [
+        value.lower() for value in response.values() 
+        if value.lower() in ('', 'null', 'undefined', 'unspecified')
+    ]
+    if invalid_values:
+        raise ValueError(f"Invalid technology values: {invalid_values}")
+    
+    return response

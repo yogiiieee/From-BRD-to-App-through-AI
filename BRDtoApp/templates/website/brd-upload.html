@@ -708,7 +708,10 @@
             .then(async data => { // Make this callback async
                 if (data.status === 'success') {
                     // Display BRD analysis results (builds HTML from JSON data)
-                    displayAnalysisResults(data.analysis_data, fileToUpload.name, data.extracted_text);
+                    console.log(data.analysis_data);
+                    analysisData = data.analysis_data.analysis_data;
+                    extractedText = data.analysis_data.extracted_text;
+                    displayAnalysisResults(analysisData, fileToUpload.name, extractedText);
                     
                     // Animate analysis results (YOUR EXISTING CODE BLOCK)
                     const metrics = analysisResults.querySelectorAll('.flex.items-center.justify-between');
@@ -878,7 +881,7 @@
                 <hr class="my-6 border-purple-200">
             `;
     
-    
+            console.log(data);
             if (data.project_summary) {
                 htmlContent += `
                     <div class="neo-card p-6 rounded-xl mb-6">
@@ -955,13 +958,36 @@
         // NEW: Function to display the identified tech stack
         function displayTechStack(techStack) {
             if (!techStackDisplay) return;
-    
+            techStack = techStack.tech_stack;
+            console.log("Tech stack display element found");
+            console.log(techStack);
+            
+            let frontendHTML = "<ul>";
+            let backendHTML = "<ul>";
+
+            if (typeof techStack.frontend === "object") {
+                for (const key in techStack.frontend) {
+                frontendHTML += `<li><strong>${key}:</strong> ${techStack.frontend[key]}</li>`;
+                }
+                frontendHTML += "</ul>";
+            } else {
+                frontendHTML = "Not specified/inferrable";
+            }
+
+            if (typeof techStack.backend === "object") {
+                for (const key in techStack.backend) {
+                backendHTML += `<li><strong>${key}:</strong> ${techStack.backend[key]}</li>`;
+                }
+                backendHTML += "</ul>";
+            } else {
+                backendHTML = "Not specified/inferrable";
+            }
             let htmlContent = `
                 <div class="neo-card p-6 rounded-xl mt-6">
                     <h3 class="text-xl font-semibold mb-3">Identified Tech Stack:</h3>
                     <p class="text-gray-700 dark:text-gray-300">
-                        <strong>Frontend:</strong> ${techStack.frontend || 'Not specified/inferrable'}<br>
-                        <strong>Backend:</strong> ${techStack.backend || 'Not specified/inferrable'}
+                        <strong>Frontend:</strong> ${frontendHTML}<br>
+                        <strong>Backend:</strong> ${backendHTML}
                     </p>
                 </div>
             `;

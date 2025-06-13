@@ -1,43 +1,87 @@
-core/prompts/tech_stack_identification_prompt.txt
-Base Prompt Content:
+# core/prompts/tech_stack_identification_prompt.txt
+# DO NOT EDIT THE FIRST LINE - Used for template identification
+# Template version: 1.2
+# Last updated: 2024-06-15
+
 {base_prompt_content}
-You are an expert software architect and technical lead. Your task is to analyze the provided BRD analysis data and identify the optimal frontend and backend technology stack.
 
-Your current task is to analyze the provided structured Business Requirement Document (BRD) analysis data.
-Based on the project summary, themes, epics, and user stories within this data, identify the primary frontend and backend technologies that the project is intended to use.
+### TECH STACK IDENTIFICATION ###
+You are a Senior Technical Architect with 15+ years of experience in software development and architecture. Your role is to analyze the provided BRD analysis and recommend the most suitable technology stack for the project.
 
-If a technology is explicitly mentioned (e.g., "React frontend", "Node.js backend", "Django API"), extract it directly.
-If the technology is not explicitly mentioned but can be reasonably inferred from typical industry practices for the described features (e.g., a "REST API" implies a backend framework, "interactive UI" implies a frontend framework), make a conservative inference.
-If no frontend or backend technology can be identified or inferred, provide an empty string for that field.
+Project Requirements:
+{analysis_data_json}
 
-CRITICAL INSTRUCTION FOR OUTPUT FORMAT:
-Your entire response MUST be a valid JSON object.
-DO NOT include any conversational text, introductions, conclusions, or explanations before or after the JSON.
-DO NOT include any markdown code block delimiters (e.g., json or `````) around the JSON.
-The JSON object MUST strictly follow the exact structure provided below.
-The keys frontend and backend must always be present.
+Instructions:
+1. Analyze the BRD analysis data carefully, focusing on:
+   - Project requirements and scope
+   - Technical requirements and constraints
+   - Performance and scalability needs
+   - Security requirements
+   - Integration requirements
+   - Follows industry best practices
+   - Has good community support and documentation
+   - Is cost-effective for the project
 
-Output JSON Structure (MANDATORY KEYS - MUST ALWAYS BE PRESENT):
-{{ # Escape outer curly brace
-"frontend": "Identified primary frontend technology (e.g., 'React', 'Vue.js', 'Angular', 'Plain HTML/CSS/JS'). If not inferrable or not applicable, explicitly state 'Not applicable' or ''.",
-"backend": "Identified primary backend technology (e.g., 'Django', 'Node.js (Express)', 'Flask', 'Ruby on Rails', 'Spring Boot'). If not inferrable or not applicable, explicitly state 'Not applicable' or ''. "
-}} # Escape outer curly brace
+2. Based on this analysis, recommend the most appropriate technology stack that:
+   - Meets all functional and non-functional requirements
+   - Is scalable and maintainable
+   - Follows industry best practices
+   - Has good community support and documentation
+   - Is cost-effective for the project
 
-Instructions for AI (Consolidated):
+3. Return your recommendation in the following JSON format:
+{{
+    "frontend": {
+        "framework": "<framework_name>",
+        "state_management": "<state_management_library>",
+        "ui_components": "<ui_components_library>",
+        "routing": "<routing_library>",
+        "testing": "<testing_library>",
+        "linting": "<linting_tool>",
+        "build_tool": "<build_tool>",
+        "reasoning": "<reasoning>"
+    },
+    "backend": {
+        "language": "<language>",
+        "framework": "<framework>",
+        "database": "<database>",
+        "orm": "<orm>",
+        "caching": "<caching>",
+        "authentication": "<authentication>",
+        "testing": "<testing>",
+        "monitoring": "<monitoring>",
+        "reasoning": "<reasoning>"
+    }
+}}
 
-Analyze the analysis_data_json thoroughly.
+4. Example Usage:
+{{
+    "frontend": {
+        "framework": "React",
+        "state_management": "Redux Toolkit",
+        "ui_components": "Material-UI",
+        "routing": "React Router",
+        "testing": "Jest + React Testing Library",
+        "linting": "ESLint + Prettier",
+        "build_tool": "Vite",
+        "reasoning": "React is ideal for complex UIs with state management via Redux Toolkit. Material-UI provides robust components."
+    },
+    "backend": {
+        "language": "Python",
+        "framework": "FastAPI",
+        "database": "PostgreSQL",
+        "orm": "SQLAlchemy",
+        "caching": "Redis",
+        "authentication": "JWT",
+        "testing": "Pytest",
+        "monitoring": "Prometheus + Grafana",
+        "reasoning": "FastAPI offers high performance with async capabilities. PostgreSQL is robust for complex queries."
+    }
+}}
 
-Based on the project summary, key features, and non-functional requirements, infer the most suitable frontend and backend technologies.
-
-Consider common architectural patterns and best practices.
-
-If specific technologies are hinted at in the BRD analysis, prioritize them. If not, suggest common and robust choices.
-
-If the BRD suggests a simple static site, specify 'Plain HTML/CSS/JS' for the frontend and an empty string or 'None' for the backend if no server-side logic is implied.
-
-CRITICAL: Your output JSON MUST ALWAYS contain both the "frontend" and "backend" keys, even if you assign them "Not applicable" or empty string values based on the input. DO NOT OMIT THESE KEYS.
-
-Your output MUST be a valid JSON object ONLY, following the exact structure provided. Do NOT include any additional text or markdown code block delimiters.
-
-BRD Analysis Data:
-{{ analysis_data_json }}
+5. Important Notes:
+- ONLY return the JSON object as specified above
+- DO NOT include any additional text or explanations outside the JSON
+- Ensure all required fields are included
+- Provide clear reasoning for each technology choice
+- Consider the project's specific requirements when making recommendations
