@@ -12,3 +12,14 @@ __pycache__/
 index.ts
 BRDtoApp/test.html
 BRDtoApp/templates/website/placeholder.html
+
+
+# Automatically generated code output
+generated_code/
+
+# Node.js artifacts
+node_modules/
+build/
+dist/
+npm-debug.log*
+yarn-error.log*
