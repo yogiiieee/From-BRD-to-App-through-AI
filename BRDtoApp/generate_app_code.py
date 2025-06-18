@@ -5,8 +5,47 @@ import json
 import logging
 import google.generativeai as genai
 from datetime import datetime
-from dotenv import load_dotenv # Make sure this is imported
+from dotenv import load_dotenv
 import re
+import shutil
+
+# Define the base directory for your boilerplate templates
+# This assumes generate_app_code.py is at the same level as boilerplate_templates/
+BOILERPLATE_TEMPLATES_DIR = "boilerplate_templates"
+
+def copy_boilerplate(template_name: str, destination_path: str):
+    """
+    Copies a specified boilerplate template to a destination path.
+
+    Args:
+        template_name (str): The name of the boilerplate folder (e.g., 'react-vite-ts-frontend').
+        destination_path (str): The path where the boilerplate should be copied.
+    """
+    source_path = os.path.join(BOILERPLATE_TEMPLATES_DIR, template_name)
+
+    if not os.path.exists(source_path):
+        print(f"Error: Boilerplate template '{template_name}' not found at {source_path}")
+        return False
+
+    # Ensure the destination directory exists
+    os.makedirs(destination_path, exist_ok=True)
+
+    try:
+        # Copy contents of the template folder to the destination
+        # Using copytree with dirs_exist_ok=True for Python 3.8+
+        # If using older Python, you might need to handle directory existence manually or use a different strategy.
+        shutil.copytree(source_path, destination_path, dirs_exist_ok=True)
+        print(f"Successfully copied boilerplate from '{source_path}' to '{destination_path}'")
+        return True
+    except shutil.Error as e:
+        print(f"Error copying boilerplate: {e}")
+        return False
+    except FileExistsError: # Catch this specifically if dirs_exist_ok is not available or desired for specific logic
+        print(f"Destination '{destination_path}' already exists and is not empty. Skipping copy.")
+        return False
+    except Exception as e:
+        print(f"An unexpected error occurred during boilerplate copy: {e}")
+        return False
 
 # --- Configure Logging ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -53,8 +92,22 @@ def get_ai_response(prompt_text):
         logger.error(f"Error calling Gemini API: {e}", exc_info=True)
         return f"Error: Failed to get response from AI - {e}"
 
+import re
+
+def strip_indents_and_format(value: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError("Input to strip_indents_and_format must be a string.")
+
+    lines = value.split('\n')
+    trimmed_lines = [line.strip() for line in lines]
+    rejoined_string = '\n'.join(trimmed_lines)
+    result_without_leading_block_indent = rejoined_string.lstrip()
+    final_result = re.sub(r'[\r\n]$', '', result_without_leading_block_indent)
+
+    return final_result
+
 # --- Code Generation Function ---
-def generate_code_from_requirements(brd_analysis_json, tech_stack_json, specific_feature_prompt):
+def generate_code_from_requirements(brd_analysis_json, tech_stack_json, specific_feature_prompt, default_design_prompt):
     """
     Generates code based on the BRD analysis, identified tech stack,
     and a specific prompt for the feature to be coded.
@@ -72,6 +125,8 @@ def generate_code_from_requirements(brd_analysis_json, tech_stack_json, specific
     # This prompt is critical! Be very clear and structured.
     prompt = f"""
     You are an expert software architect and senior full-stack developer. Your task is to generate production-ready code based on provided project requirements and a specified technology stack.
+
+    {default_design_prompt}
 
     Here is the high-level analysis of a Business Requirement Document (BRD):
     ---BRD Analysis---
@@ -185,8 +240,16 @@ def save_generated_code(ai_response_json_str, output_base_dir="generated_code"):
 if __name__ == "__main__":
     logger.info("--- Starting Code Generation Test Script ---")
 
-    # --- INPUT 1: Structured BRD Analysis Output ---
-    # (Your existing brd_analysis_from_app JSON - no changes needed here)
+    # --- INPUT 1: Default Design Prompt ---
+    default_design_prompt = """
+        For all designs I ask you to make, have them be beautiful, not cookie cutter. Make webpages that are fully featured and worthy for production.
+
+        By default, this template supports JSX syntax with Tailwind CSS classes, React hooks, and Lucide React for icons. Do not install other packages for UI themes, icons, etc unless absolutely necessary or I request them.
+
+        Use icons from lucide-react for logos.
+        """
+
+    # --- INPUT 2: Structured BRD Analysis Output ---
     brd_analysis_from_app = {
         "project_summary": "Manage registration, authentication, and authorization for dealerships, agencies, and super admins. Enable dealerships to post jobs and agencies to manage and share candidate data. Facilitate communication and collaboration between dealerships and agencies. Provide dashboards for super admins, dealership HRs, and agencies to track key metrics.",
         "themes": [
@@ -401,8 +464,7 @@ if __name__ == "__main__":
     }
 
 
-    # --- INPUT 2: Identified Tech Stack ---
-    # (Your existing tech_stack_identified JSON - no changes needed here)
+    # --- INPUT 3: Identified Tech Stack ---
     tech_stack_identified = {
         "status": "success",
         "tech_stack": {
@@ -431,13 +493,37 @@ if __name__ == "__main__":
         "raw_ai_response": "{\"frontend\": {\"framework\": \"React\", \"state_management\": \"Zustand\", \"ui_components\": \"Material-UI\", \"routing\": \"React Router\", \"testing\": \"Jest + React Testing Library\", \"linting\": \"ESLint + Prettier\", \"build_tool\": \"Vite\", \"reasoning\": \"React provides a robust and widely adopted framework for building complex user interfaces. Zustand offers a lightweight and performant state management solution, suitable for the project's scope. Material-UI provides a rich set of pre-built components, accelerating development and ensuring consistency. React Router handles navigation efficiently. Jest and React Testing Library offer comprehensive testing capabilities. ESLint and Prettier ensure code quality and maintainability. Vite is a fast build tool improving developer experience.\"}, \"backend\": {\"language\": \"Node.js\", \"framework\": \"Express.js\", \"database\": \"PostgreSQL\", \"orm\": \"TypeORM\", \"caching\": \"Redis\", \"authentication\": \"JWT\", \"testing\": \"Jest + Supertest\", \"monitoring\": \"Prometheus + Grafana\", \"reasoning\": \"Node.js with Express.js provides a flexible and scalable backend solution. PostgreSQL is a robust, open-source relational database that handles complex data structures well. TypeORM provides an Object-Relational Mapper (ORM) for easier database interactions. Redis is used for caching frequently accessed data to improve performance. JWT is a secure and widely adopted authentication standard. Jest and Supertest enable comprehensive testing of backend functionalities. Prometheus and Grafana provide comprehensive monitoring and alerting.\"}}"
     }
 
-    specific_feature_prompt = "Generate the complete production-ready code for user login and registration for all user roles (Dealership HR, Recruitment Agency, Super Admin), including frontend (React, Material-UI), backend API (Node.js, Express.js), and database models (PostgreSQL, TypeORM) with JWT authentication."
-
+    # --- INPUT 4: Specific Feature Prompt ---
+    specific_feature_prompt = """
+        Generate the complete production-ready code for user login and registration for all user roles (Dealership HR, Recruitment Agency, Super Admin),
+        including:
+        1.  **Full Project Setup:**
+            * **Frontend (React, Material-UI):** Include all necessary files to initialize a standard React project,
+                such as `package.json`, `vite.config.js` (since you're using Vite), `index.html`, `App.js` (or `App.tsx`),
+                and any other essential configuration files. The frontend should be immediately runnable with `npm install` and `npm start`.
+            * **Backend API (Node.js, Express.js with TypeScript and TypeORM, PostgreSQL):** Include all necessary files
+                to initialize a standard Node.js/Express.js project using TypeScript and TypeORM,
+                such as `package.json`, `tsconfig.json`, `ormconfig.json` (or database configuration in `index.ts`),
+                a main server entry file (e.g., `src/index.ts` or `app.ts`), and basic routing setup.
+                The backend should be immediately runnable with `npm install` and `npm start` (or `npm run dev`).
+                Ensure basic database connection setup for PostgreSQL is included (e.g., in `index.ts` or a dedicated `database.ts`).
+        2.  **User Login and Registration Feature Implementation:**
+            * **Frontend:** `LoginPage.jsx` and `RegistrationPage.jsx` with Material-UI components,
+                handling state, form submission, and API calls.
+            * **Backend:** API endpoints for `/auth/register` and `/auth/login` (or similar).
+                Implement user creation (with password hashing), user authentication, and JWT token generation.
+            * **Database Models:** `User.ts` (with roles: DEALERSHIP, AGENCY, SUPER_ADMIN), `Dealership.ts`.
+                Ensure TypeORM decorators are correctly used for entities and relationships.
+        3.  **Basic Setup Instructions:** Provide a `README.md` file in the root of each generated project (frontend and backend)
+            with clear, concise steps to install dependencies and run the application.
+            This includes commands like `npm install`, `npm start` (or `npm run dev`), and any database setup steps.
+        """.strip()
     # --- Call the Code Generation Function ---
     ai_raw_response = generate_code_from_requirements(
         brd_analysis_json=brd_analysis_from_app,
         tech_stack_json=tech_stack_identified,
-        specific_feature_prompt=specific_feature_prompt
+        specific_feature_prompt=specific_feature_prompt,
+        default_design_prompt=default_design_prompt
     )
 
     # --- Save the Generated Code ---
