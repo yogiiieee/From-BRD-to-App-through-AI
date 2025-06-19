@@ -10,10 +10,43 @@ import re
 import shutil
 
 # Define the base directory for your boilerplate templates
-# This assumes generate_app_code.py is at the same level as boilerplate_templates/
-BOILERPLATE_TEMPLATES_DIR = "boilerplate_templates"
+# Using absolute path to ensure correct location
+BOILERPLATE_TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "boilerplate_templates")
 
-def copy_boilerplate(template_name: str, destination_path: str):
+# --- Configure Logging ---
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# --- Gemini API Configuration ---
+load_dotenv() # Load from .env file if it exists in the same directory or parent
+
+try:
+    genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+    logger.info("Gemini API configured successfully.")
+except KeyError:
+    logger.error("GEMINI_API_KEY environment variable not set. Please set it in your .env file or system environment.")
+    raise EnvironmentError("GEMINI_API_KEY not found. Cannot proceed without API key.")
+
+GEMINI_MODEL_NAME = "gemini-1.5-flash"
+gemini_model = genai.GenerativeModel(GEMINI_MODEL_NAME)
+logger.info(f"Using Gemini model: {GEMINI_MODEL_NAME}")
+
+#Helper functions (small resuable utilities)
+#strip_indents_and_format
+def strip_indents_and_format(value: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError("Input to strip_indents_and_format must be a string.")
+
+    lines = value.split('\n')
+    trimmed_lines = [line.strip() for line in lines]
+    rejoined_string = '\n'.join(trimmed_lines)
+    result_without_leading_block_indent = rejoined_string.lstrip()
+    final_result = re.sub(r'[\r\n]$', '', result_without_leading_block_indent)
+
+    return final_result
+
+#copy_boilerplate
+def copy_boilerplate(template_name: str, destination_path: str) -> bool:
     """
     Copies a specified boilerplate template to a destination path.
 
@@ -35,36 +68,19 @@ def copy_boilerplate(template_name: str, destination_path: str):
         # Using copytree with dirs_exist_ok=True for Python 3.8+
         # If using older Python, you might need to handle directory existence manually or use a different strategy.
         shutil.copytree(source_path, destination_path, dirs_exist_ok=True)
-        print(f"Successfully copied boilerplate from '{source_path}' to '{destination_path}'")
+        logger.info(f"Successfully copied boilerplate from '{source_path}' to '{destination_path}'")
         return True
     except shutil.Error as e:
-        print(f"Error copying boilerplate: {e}")
+        logger.error(f"Error copying boilerplate: {e}")
         return False
     except FileExistsError: # Catch this specifically if dirs_exist_ok is not available or desired for specific logic
-        print(f"Destination '{destination_path}' already exists and is not empty. Skipping copy.")
+        logger.error(f"Destination '{destination_path}' already exists and is not empty. Skipping copy.")
         return False
     except Exception as e:
-        print(f"An unexpected error occurred during boilerplate copy: {e}")
+        logger.error(f"An unexpected error occurred during boilerplate copy: {e}")
         return False
 
-# --- Configure Logging ---
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-# --- Gemini API Configuration ---
-load_dotenv() # Load from .env file if it exists in the same directory or parent
-
-try:
-    genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-    logger.info("Gemini API configured successfully.")
-except KeyError:
-    logger.error("GEMINI_API_KEY environment variable not set. Please set it in your .env file or system environment.")
-    raise EnvironmentError("GEMINI_API_KEY not found. Cannot proceed without API key.")
-
-GEMINI_MODEL_NAME = "gemini-1.5-flash"
-gemini_model = genai.GenerativeModel(GEMINI_MODEL_NAME)
-logger.info(f"Using Gemini model: {GEMINI_MODEL_NAME}")
-
+# Core Logic Functions
 # --- Helper Function to Call AI ---
 def get_ai_response(prompt_text):
     """
@@ -92,19 +108,79 @@ def get_ai_response(prompt_text):
         logger.error(f"Error calling Gemini API: {e}", exc_info=True)
         return f"Error: Failed to get response from AI - {e}"
 
-import re
+#determine_boilerplates
+def determine_boilerplates(tech_stack_json: dict) -> dict:
+    required_boilerplates = {}
+    
+    # Get the actual tech stack from the nested structure
+    tech_stack = tech_stack_json.get("tech_stack", {})
+    
+    # Frontend
+    frontend = tech_stack.get("frontend", {})
+    frontend_framework = frontend.get("framework")
+    frontend_build_tool = frontend.get("build_tool")
+    
+    logger.info(f"Detected frontend tech stack: {frontend}")
+    
+    if frontend_framework == "React" and frontend_build_tool == "Vite":
+        required_boilerplates['frontend'] = "react_vite_ts"
+    elif frontend_framework == "Next.js" and frontend_build_tool == "Vite":
+        required_boilerplates['frontend'] = "next_tailwind"
+    
+    # Backend
+    backend = tech_stack.get("backend", {})
+    backend_language = backend.get("language")
+    backend_framework = backend.get("framework")
+    
+    logger.info(f"Detected backend tech stack: {backend}")
+    
+    if backend_language == "Node.js" and backend_framework == "Express.js":
+        required_boilerplates['backend'] = "node_js"
+    elif backend_language == "Python" and backend_framework == "Flask":
+        required_boilerplates['backend'] = "python_flask"
 
-def strip_indents_and_format(value: str) -> str:
-    if not isinstance(value, str):
-        raise TypeError("Input to strip_indents_and_format must be a string.")
+    logger.info(f"Required boilerplates: {required_boilerplates}")
+    return required_boilerplates
 
-    lines = value.split('\n')
-    trimmed_lines = [line.strip() for line in lines]
-    rejoined_string = '\n'.join(trimmed_lines)
-    result_without_leading_block_indent = rejoined_string.lstrip()
-    final_result = re.sub(r'[\r\n]$', '', result_without_leading_block_indent)
+#High-level orchestration functions
+#orchestrate_code_generation
+def orchestrate_code_generation(brd_analysis_json: dict, tech_stack_json: dict, feature_name: str):
+    """
+    Orchestrates code generation while maintaining the existing generated_code folder structure.
+    Returns paths where boilerplates were copied.
+    """
+    # Use your existing generated_code directory
+    generated_code_root = "generated_code"
+    
+    # Create timestamped folder within generated_code
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    sanitized_feature_name = feature_name.replace(" ", "_").replace("/", "_")[:60].strip('_')
+    project_output_dir = os.path.join(generated_code_root, f"{sanitized_feature_name}_{timestamp}")
+    os.makedirs(project_output_dir, exist_ok=True)
+    
+    logger.info(f"Project directory created at: {project_output_dir}")
 
-    return final_result
+    # Determine which boilerplates are needed
+    boilerplates_to_use = determine_boilerplates(tech_stack_json)
+    copied_paths = {}
+
+    # Copy the boilerplates
+    if 'frontend' in boilerplates_to_use:
+        frontend_dest = os.path.join(project_output_dir, "frontend")
+        if copy_boilerplate(boilerplates_to_use['frontend'], frontend_dest):
+            copied_paths['frontend'] = frontend_dest
+            logger.info(f"Successfully copied frontend boilerplate to {frontend_dest}")
+    if 'backend' in boilerplates_to_use:
+        backend_dest = os.path.join(project_output_dir, "backend")
+        if copy_boilerplate(boilerplates_to_use['backend'], backend_dest):
+            copied_paths['backend'] = backend_dest
+            logger.info(f"Successfully copied backend boilerplate to {backend_dest}")
+
+    if not copied_paths:
+        print("No boilerplates were successfully copied. Cannot proceed with AI generation.")
+        return
+    
+    return copied_paths
 
 # --- Code Generation Function ---
 def generate_code_from_requirements(brd_analysis_json, tech_stack_json, specific_feature_prompt, default_design_prompt):
@@ -176,65 +252,81 @@ def generate_code_from_requirements(brd_analysis_json, tech_stack_json, specific
     return get_ai_response(prompt)
 
 # --- Function to Save Generated Code to Files ---
-def save_generated_code(ai_response_json_str, output_base_dir="generated_code"):
+def save_generated_code(ai_response_json_str, output_base_dir="generated_code", project_paths=None):
     """
     Parses the AI's JSON response and saves the code content into respective files.
+    Now supports both traditional saving and boilerplate-integrated saving.
     
     Args:
-        ai_response_json_str (str): The raw JSON string received from the AI (after stripping markdown).
-        output_base_dir (str): The base directory where generated code will be saved.
+        ai_response_json_str (str): The raw JSON string received from the AI
+        output_base_dir (str): Base directory for traditional saving (default: "generated_code")
+        project_paths (dict): Optional - {'frontend': path, 'backend': path} for boilerplate integration
     """
     try:
         response_data = json.loads(ai_response_json_str)
         if "files" not in response_data or not isinstance(response_data["files"], list):
-            logger.error("AI response is not in the expected 'files' JSON format after stripping markdown.")
-            print("AI Response was not in expected JSON format. Please check the model output.")
-            print(f"Raw AI Response (after stripping):\n{ai_response_json_str}")
+            logger.error("AI response is not in the expected 'files' JSON format")
+            print("AI Response was not in expected JSON format.")
+            print(f"Raw AI Response:\n{ai_response_json_str}")
             return
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        # Sanitize feature prompt for directory name.
-        # Use a more robust sanitization if needed, but this is a good start.
-        feature_dir_name = specific_feature_prompt.replace(" ", "_").replace("/", "_").replace("\\", "_").replace(":", "").replace('"', '').replace("'", "")[:60]
-        # Ensure it doesn't end with an underscore if there were trailing special chars
-        feature_dir_name = feature_dir_name.strip('_') 
+        # NEW: Determine save mode
+        use_boilerplate = project_paths is not None
         
-        full_output_dir = os.path.join(output_base_dir, f"{feature_dir_name}_{timestamp}")
-        os.makedirs(full_output_dir, exist_ok=True)
-        logger.info(f"Saving generated code to: {full_output_dir}")
+        if use_boilerplate:
+            logger.info("Saving files into boilerplate project structure")
+        else:
+            # Traditional saving with timestamped folder
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            feature_dir_name = specific_feature_prompt.replace(" ", "_").replace("/", "_")[:60].strip('_')
+            full_output_dir = os.path.join(output_base_dir, f"{feature_dir_name}_{timestamp}")
+            os.makedirs(full_output_dir, exist_ok=True)
+            logger.info(f"Saving generated code to: {full_output_dir}")
 
         for file_info in response_data["files"]:
             file_path = file_info.get("file_path")
             content = file_info.get("content")
 
-            if not file_path or content is None: # content can be empty string, but not None
+            if not file_path or content is None:
                 logger.warning(f"Skipping malformed file entry: {file_info}")
                 continue
 
-            # Ensure the full path is within the output directory (security check)
-            # This is crucial to prevent the AI from writing files anywhere on your system.
-            # Convert both paths to absolute and then check if the file path starts with the output directory path
-            abs_output_dir = os.path.abspath(full_output_dir)
-            abs_file_path = os.path.abspath(os.path.join(full_output_dir, file_path))
-            
-            if not abs_file_path.startswith(abs_output_dir):
-                logger.warning(f"Skipping potentially malicious path outside output directory: {file_path}")
-                continue
+            # NEW: Handle both saving modes
+            if use_boilerplate:
+                # Boilerplate-integrated saving
+                if file_path.startswith("frontend/"):
+                    full_path = os.path.join(project_paths['frontend'], file_path)
+                elif file_path.startswith("backend/"):
+                    full_path = os.path.join(project_paths['backend'], file_path)
+                else:
+                    logger.warning(f"Skipping file with invalid path prefix: {file_path}")
+                    continue
+            else:
+                # Traditional saving
+                full_path = os.path.join(full_output_dir, file_path)
+                abs_output_dir = os.path.abspath(full_output_dir)
+                abs_file_path = os.path.abspath(full_path)
+                
+                # Security check
+                if not abs_file_path.startswith(abs_output_dir):
+                    logger.warning(f"Skipping potentially malicious path: {file_path}")
+                    continue
 
-            os.makedirs(os.path.dirname(abs_file_path), exist_ok=True)
-            with open(abs_file_path, "w", encoding="utf-8") as f:
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            with open(full_path, "w", encoding="utf-8") as f:
                 f.write(content)
-            logger.info(f"Saved: {abs_file_path}")
+            logger.info(f"Saved: {full_path}")
         
-        print(f"\nCode generation complete. Files saved to: {os.path.abspath(full_output_dir)}")
-        print("You can now navigate to this directory to test the generated code.")
+        if not use_boilerplate:
+            print(f"\nCode generation complete. Files saved to: {os.path.abspath(full_output_dir)}")
+            print("You can now navigate to test the generated code.")
 
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse AI response as JSON: {e}", exc_info=True)
-        print("Error: AI did not return valid JSON. This might mean the cleaning failed or the AI itself broke the JSON structure.")
-        print(f"Raw AI Response (after potential cleaning, before JSON parsing):\n{ai_response_json_str}")
+        print("Error: Invalid JSON response from AI.")
+        print(f"Raw Response:\n{ai_response_json_str}")
     except Exception as e:
-        logger.critical(f"An unexpected error occurred while saving files: {e}", exc_info=True)
+        logger.critical(f"Error while saving files: {e}", exc_info=True)
 
 # --- Main Execution Block ---
 if __name__ == "__main__":
@@ -495,29 +587,98 @@ if __name__ == "__main__":
 
     # --- INPUT 4: Specific Feature Prompt ---
     specific_feature_prompt = """
-        Generate the complete production-ready code for user login and registration for all user roles (Dealership HR, Recruitment Agency, Super Admin),
-        including:
-        1.  **Full Project Setup:**
-            * **Frontend (React, Material-UI):** Include all necessary files to initialize a standard React project,
-                such as `package.json`, `vite.config.js` (since you're using Vite), `index.html`, `App.js` (or `App.tsx`),
-                and any other essential configuration files. The frontend should be immediately runnable with `npm install` and `npm start`.
-            * **Backend API (Node.js, Express.js with TypeScript and TypeORM, PostgreSQL):** Include all necessary files
-                to initialize a standard Node.js/Express.js project using TypeScript and TypeORM,
-                such as `package.json`, `tsconfig.json`, `ormconfig.json` (or database configuration in `index.ts`),
-                a main server entry file (e.g., `src/index.ts` or `app.ts`), and basic routing setup.
-                The backend should be immediately runnable with `npm install` and `npm start` (or `npm run dev`).
-                Ensure basic database connection setup for PostgreSQL is included (e.g., in `index.ts` or a dedicated `database.ts`).
-        2.  **User Login and Registration Feature Implementation:**
-            * **Frontend:** `LoginPage.jsx` and `RegistrationPage.jsx` with Material-UI components,
-                handling state, form submission, and API calls.
-            * **Backend:** API endpoints for `/auth/register` and `/auth/login` (or similar).
-                Implement user creation (with password hashing), user authentication, and JWT token generation.
-            * **Database Models:** `User.ts` (with roles: DEALERSHIP, AGENCY, SUPER_ADMIN), `Dealership.ts`.
-                Ensure TypeORM decorators are correctly used for entities and relationships.
-        3.  **Basic Setup Instructions:** Provide a `README.md` file in the root of each generated project (frontend and backend)
-            with clear, concise steps to install dependencies and run the application.
-            This includes commands like `npm install`, `npm start` (or `npm run dev`), and any database setup steps.
+        Generate ONLY the login and signup functionality based on the BRD requirements, 
+        integrating with these EXACT boilerplate structures:
+
+        === FRONTEND (React + Vite + TS) ===
+        Files available in boilerplate:
+        - `src/main.tsx` (Already sets up React+Router)
+        - `src/App.tsx` (Root component)
+        - `vite.config.js` (Build config - DON'T MODIFY)
+        - `package.json` (With React, ReactDOM, Vite installed - DON'T REGENERATE)
+
+        File locations to generate:
+        1. Login Page:
+        - Path: `src/pages/auth/LoginPage.tsx`
+        - Requirements:
+            * Email + Password form
+            * "Remember me" checkbox
+            * Forgot password link
+            * Form validation
+            * Submit handler calling `/api/auth/login`
+
+        2. Signup Page:
+        - Path: `src/pages/auth/SignupPage.tsx`
+        - Requirements:
+            * Fields: Name, Email, Password, Confirm Password
+            * Role selection (Dealership/Agency)
+            * Form validation
+            * Submit handler calling `/api/auth/signup`
+
+        3. Auth Service:
+        - Path: `src/services/authService.ts`
+        - Requirements:
+            * API calls to backend endpoints
+            * JWT token handling
+            * Error handling
+
+        === BACKEND (Node.js + Express + TS) ===
+        Files available in boilerplate:
+        - `src/index.ts` (Server setup - ADD ROUTES HERE)
+        - `package.json` (Express, TypeORM installed - DON'T REGENERATE)
+
+        File locations to generate:
+        1. Auth Routes:
+        - Path: `src/routes/authRoutes.ts`
+        - Endpoints:
+            * POST /api/auth/login
+            * POST /api/auth/signup
+            * JWT authentication middleware
+
+        2. User Entity:
+        - Path: `src/entities/User.ts`
+        - Fields:
+            * id, email, password (hashed), name, role(enum)
+
+        3. Auth Controller:
+        - Path: `src/controllers/authController.ts`
+        - Methods:
+            * login()
+            * signup()
+            * Input validation
+
+        === IMPORTANT INSTRUCTIONS ===
+        1. DO NOT regenerate existing boilerplate files
+        2. ONLY create/modify the specified files above
+        3. Assume all dependencies are already installed
+        4. Use existing project structure and conventions
+        5. For React: Use functional components with hooks
+        6. For Express: Use async/await with proper error handling
+
+        Output format (STRICT JSON):
+        ```json
+        {
+        "files": [
+            {
+            "file_path": "frontend/src/pages/auth/LoginPage.tsx",
+            "content": "import React from 'react'...",
+            "overwrite": false
+            },
+            {
+            "file_path": "backend/src/routes/authRoutes.ts", 
+            "content": "import express from 'express'...",
+            "overwrite": true
+            }
+        ]
+        }
         """.strip()
+
+    # 1. Copy boilerplates first
+    project_paths = orchestrate_code_generation(
+        brd_analysis_json=brd_analysis_from_app,
+        tech_stack_json=tech_stack_identified,
+        feature_name="user_auth"  # Or make this dynamic
+    )
     # --- Call the Code Generation Function ---
     ai_raw_response = generate_code_from_requirements(
         brd_analysis_json=brd_analysis_from_app,
@@ -527,6 +688,6 @@ if __name__ == "__main__":
     )
 
     # --- Save the Generated Code ---
-    save_generated_code(ai_raw_response)
+    save_generated_code(ai_raw_response, project_paths=project_paths)
 
     logger.info("--- Code Generation Test Script Finished ---")
