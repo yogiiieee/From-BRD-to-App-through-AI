@@ -32,6 +32,54 @@ gemini_model = genai.GenerativeModel(GEMINI_MODEL_NAME)
 logger.info(f"Using Gemini model: {GEMINI_MODEL_NAME}")
 
 #Helper functions (small resuable utilities)
+def get_boilerplate_file_content(template_name: str, relative_file_paths: list) -> str:
+    """
+    Reads and formats content of specified files from a boilerplate template for AI context.
+
+    Args:
+        template_name (str): The name of the boilerplate folder (e.g., 'react-vite-ts-frontend').
+        relative_file_paths (list): A list of file paths relative to the boilerplate template root
+                                   (e.g., ['src/App.tsx', 'package.json']).
+
+    Returns:
+        str: Formatted string containing file paths and their contents,
+             suitable for including in the AI prompt.
+    """
+    boilerplate_root_path = os.path.join(BOILERPLATE_TEMPLATES_DIR, template_name)
+    context_content = ""
+
+    for rel_path in relative_file_paths:
+        file_full_path = os.path.join(boilerplate_root_path, rel_path)
+        if os.path.exists(file_full_path) and os.path.isfile(file_full_path):
+            try:
+                with open(file_full_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                # Truncate very long files if necessary to stay within context window limits.
+                # Adjust this limit based on your model's context window.
+                MAX_CONTENT_LENGTH = 1500 # Characters, adjust as needed
+                if len(content) > MAX_CONTENT_LENGTH:
+                    content = content[:MAX_CONTENT_LENGTH] + "\n... (truncated for brevity) ..."
+
+                # Determine markdown language for syntax highlighting in prompt
+                file_extension = os.path.splitext(rel_path)[1].lower()
+                lang_map = {
+                    '.ts': 'typescript', '.tsx': 'typescript', '.js': 'javascript', '.jsx': 'javascript',
+                    '.json': 'json', '.css': 'css', '.html': 'html', '.py': 'python',
+                    '.env': 'bash', '.md': 'markdown'
+                }
+                lang = lang_map.get(file_extension, '') # Default to no language if unknown
+
+                context_content += f"File: {rel_path}\n"
+                context_content += f"```{lang}\n{content}\n```\n\n"
+                logger.debug(f"Added {rel_path} to AI context.")
+            except Exception as e:
+                logger.warning(f"Could not read file {file_full_path} for AI context: {e}")
+        else:
+            logger.warning(f"Boilerplate file not found for AI context: {file_full_path}")
+
+    return context_content
+
 #strip_indents_and_format
 def strip_indents_and_format(value: str) -> str:
     if not isinstance(value, str):
@@ -82,31 +130,31 @@ def copy_boilerplate(template_name: str, destination_path: str) -> bool:
 
 # Core Logic Functions
 # --- Helper Function to Call AI ---
-def get_ai_response(prompt_text):
+def get_ai_response(prompt_text: str) -> str:
     """
     Sends a prompt to the configured Gemini model and returns the response text,
-    stripping potential markdown code block wrappers more robustly.
+    forcing it to be in application/json MIME type.
     """
     try:
-        response = gemini_model.generate_content(prompt_text)
-        raw_text = response.text
-        
-        # --- FIX STARTS HERE ---
-        # Robustly remove leading/trailing markdown code block fences (```json, ```)
-        # re.DOTALL ensures '.' matches newlines as well
-        # re.IGNORECASE makes it case-insensitive for 'json'
-        # re.MULTILINE allows ^ and $ to match start/end of lines, but we use it more for the general pattern.
-        cleaned_text = re.sub(r'^\s*```json\s*\n|\n\s*```\s*$', '', raw_text, flags=re.DOTALL | re.IGNORECASE).strip()
-        
-        if cleaned_text != raw_text.strip(): # Check if any stripping actually occurred
-            logger.info("Stripped markdown JSON wrapper from AI response.")
-            
-        # --- FIX ENDS HERE ---
-        
-        return cleaned_text # Return the cleaned string
+        # Crucial change: Add the generation_config with response_mime_type
+        response = gemini_model.generate_content(
+            prompt_text,
+            generation_config={
+                "response_mime_type": "application/json"
+            }
+        )
+
+        # When response_mime_type="application/json" is used,
+        # response.text should directly contain the JSON string.
+        # No stripping of markdown fences is typically needed.
+        raw_json_string = response.text
+
+        logger.info("Received AI response in JSON format.")
+        return raw_json_string
+
     except Exception as e:
         logger.error(f"Error calling Gemini API: {e}", exc_info=True)
-        return f"Error: Failed to get response from AI - {e}"
+        return ""
 
 #determine_boilerplates
 def determine_boilerplates(tech_stack_json: dict) -> dict:
@@ -177,9 +225,126 @@ def orchestrate_code_generation(brd_analysis_json: dict, tech_stack_json: dict, 
             logger.info(f"Successfully copied backend boilerplate to {backend_dest}")
 
     if not copied_paths:
-        print("No boilerplates were successfully copied. Cannot proceed with AI generation.")
+        logger.error("No boilerplates were successfully copied. Cannot proceed with AI generation.")
+        print("Error: No boilerplates were copied. Check your template directory or tech stack configuration.")
         return
     
+    # --- Generate Frontend Code (if applicable) ---
+    if 'frontend' in copied_paths:
+        print(f"\n--- Generating frontend code ---")
+        frontend_boilerplate_name = boilerplates_to_use['frontend']
+
+        # Define key boilerplate files to include in the prompt context
+        if frontend_boilerplate_name == "react_vite_ts":
+             frontend_context_files = [
+                'package.json',
+                'vite.config.js',
+                'index.html', # This is the root index.html
+                'src/main.tsx',
+                'src/App.tsx',
+                'src/index.css',
+                'eslint.config.js',
+                'tsconfig.json',
+                'tsconfig.node.json'
+                # '.gitignore' and 'package-lock.json' are typically not modified by AI
+            ]
+        elif frontend_boilerplate_name == "next_tailwind":
+             frontend_context_files = [
+                'package.json',
+                'tailwind.config.js',
+                'app/layout.tsx',
+                'app/page.tsx',
+                'app/globals.css'
+            ]
+        else:
+            frontend_context_files = [] # Add other frontend types if needed
+
+        # Get content of boilerplate files to provide as context to the AI
+        frontend_context = get_boilerplate_file_content(
+            frontend_boilerplate_name,
+            frontend_context_files
+        )
+
+        
+        frontend_framework = tech_stack_json.get('frontend', {}).get('framework', 'unknown frontend framework')
+
+        frontend_prompt = f"""
+        The basic project structure for a {frontend_framework} frontend 
+        ({frontend_boilerplate_name}) has already been generated and is in place at the root of the frontend project.
+
+        Your task is to implement the following frontend features:
+        {brd_analysis_json.get('frontend_features', 'Implement basic application logic as per BRD analysis.')}
+
+        To achieve this, you **MUST** make necessary modifications to existing boilerplate files (e.g., `src/App.tsx`, `src/main.tsx` for routing, `package.json` for new dependencies). You should also create any new components, pages, or service files required.
+
+        **Provide the *full and complete content* for any file you modify or create.** If you modify an existing boilerplate file, ensure you output its entire new content, not just the changes.
+        List files with their relative paths from the frontend project root, followed by their content.
+
+        --- Existing Frontend Files Context ---
+        {frontend_context}
+
+        --- Requested Frontend Files ---
+        """
+        frontend_ai_response = get_ai_response(frontend_prompt)
+        save_generated_code(frontend_ai_response, copied_paths['frontend'])
+        print(f"Frontend code generation requested. Output directory: {copied_paths['frontend']}")
+
+    # --- Generate Backend Code (if applicable) ---
+    if 'backend' in copied_paths:
+        print(f"\n--- Generating backend code ---")
+        backend_boilerplate_name = boilerplates_to_use['backend']
+
+        # Define key boilerplate files to include in the prompt context
+        if backend_boilerplate_name == "node_js":
+            backend_context_files = [
+                'package.json',
+                'tsconfig.json',
+                '.env.example',
+                'eslint.config.js',
+                'src/routes/health.ts',
+                'src/routes/index.ts' # This is likely your main routing file
+                # '.gitignore', 'package-lock.json', and 'README.md' are typically not modified by AI
+            ]
+        elif backend_boilerplate_name == "python_flask":
+            backend_context_files = [
+                'requirements.txt',
+                'app.py',
+                '.env.example'
+            ]
+        else:
+            backend_context_files = [] # Add other backend types if needed
+
+        # Get content of boilerplate files to provide as context to the AI
+        backend_context = get_boilerplate_file_content(
+            backend_boilerplate_name,
+            backend_context_files
+        )
+
+        backend_framework = tech_stack_json.get('backend', {}).get('framework', 'unknown backend framework')
+        backend_language = tech_stack_json.get('backend', {}).get('language', 'unknown backend language')
+
+        backend_prompt = f"""
+        The basic project structure for a {backend_language} + {backend_framework} backend
+        ({backend_boilerplate_name}) has already been generated and is in place at the root of the backend project.
+
+        Your task is to implement the following backend functionalities:
+        {brd_analysis_json.get('backend_features', 'Implement basic API endpoints as per BRD analysis.')}
+
+        To achieve this, you **MUST** make necessary modifications to existing boilerplate files (e.g., `src/index.ts` for adding new routes/middleware, `package.json` for new dependencies, `src/data-source.ts` for entities). You should also create any new routes, controllers, services, or database models/entities required.
+
+        **Provide the *full and complete content* for any file you modify or create.** If you modify an existing boilerplate file, ensure you output its entire new content, not just the changes.
+        List files with their relative paths from the backend project root, followed by their content.
+
+        --- Existing Backend Files Context ---
+        {backend_context}
+
+        --- Requested Backend Files ---
+        """
+        backend_ai_response = get_ai_response(backend_prompt)
+        save_generated_code(backend_ai_response, copied_paths['backend'])
+        print(f"Backend code generation requested. Output directory: {copied_paths['backend']}")
+
+    print(f"\nOrchestration complete. Boilerplates are in {project_output_dir}. AI will now add/modify code.")
     return copied_paths
 
 # --- Code Generation Function ---
@@ -587,86 +752,132 @@ if __name__ == "__main__":
 
     # --- INPUT 4: Specific Feature Prompt ---
     specific_feature_prompt = """
-        Generate ONLY the login and signup functionality based on the BRD requirements, 
-        integrating with these EXACT boilerplate structures:
+        Your task is to implement a **login and signup functionality** for a full-stack application.
+        **Crucially, the backend should use IN-MEMORY storage only; DO NOT implement any database models, database connections, or persistence logic.**
+
+        You have access to the existing boilerplate code as provided in the context below. You MUST modify existing boilerplate files (like main entry points) and create new files as needed.
 
         === FRONTEND (React + Vite + TS) ===
-        Files available in boilerplate:
-        - `src/main.tsx` (Already sets up React+Router)
-        - `src/App.tsx` (Root component)
-        - `vite.config.js` (Build config - DON'T MODIFY)
-        - `package.json` (With React, ReactDOM, Vite installed - DON'T REGENERATE)
+        Your goal is to provide the user interface for login and signup, and integrate it with the backend API endpoints.
 
-        File locations to generate:
-        1. Login Page:
-        - Path: `src/pages/auth/LoginPage.tsx`
-        - Requirements:
-            * Email + Password form
-            * "Remember me" checkbox
-            * Forgot password link
-            * Form validation
-            * Submit handler calling `/api/auth/login`
+        Files to generate/modify:
 
-        2. Signup Page:
-        - Path: `src/pages/auth/SignupPage.tsx`
-        - Requirements:
-            * Fields: Name, Email, Password, Confirm Password
-            * Role selection (Dealership/Agency)
-            * Form validation
-            * Submit handler calling `/api/auth/signup`
+        1.  **Login Page:**
+            * Path: `src/pages/auth/LoginPage.tsx`
+            * Requirements:
+                * React functional component.
+                * Email and Password input fields.
+                * A "Login" button.
+                * Basic client-side form validation (e.g., email format, password length).
+                * A submit handler that calls the backend `/api/auth/login` endpoint using `src/services/authService.ts`.
+                * Handle successful login (e.g., store a mock JWT token in memory/localStorage, redirect to a dashboard/home page).
+                * Handle basic error display (e.g., "Invalid credentials").
+                * "Remember me" checkbox.
+                * "Forgot password" link (can be a placeholder).
+                * Link to Signup page.
 
-        3. Auth Service:
-        - Path: `src/services/authService.ts`
-        - Requirements:
-            * API calls to backend endpoints
-            * JWT token handling
-            * Error handling
+        2.  **Signup Page:**
+            * Path: `src/pages/auth/SignupPage.tsx`
+            * Requirements:
+                * React functional component.
+                * Fields: Name, Email, Password, Confirm Password.
+                * Role selection (e.g., a simple dropdown or radio buttons for "Dealership" / "Agency").
+                * Basic client-side form validation (e.g., email format, password match).
+                * A submit handler that calls the backend `/api/auth/signup` endpoint using `src/services/authService.ts`.
+                * Handle successful signup (e.g., redirect to login page or show success message).
+                * Handle basic error display (e.g., "Email already registered").
+                * Link back to Login page.
+
+        3.  **Auth Service:**
+            * Path: `src/services/authService.ts`
+            * Requirements:
+                * Provides functions for `login(email, password)` and `signup(name, email, password, role)`.
+                * Uses `fetch` or `axios` (if you manually add it to package.json) for API calls.
+                * Handles mock JWT token storage (e.g., `localStorage.setItem('token', 'mock_jwt_token')`).
+                * Basic error handling for API responses.
+
+        4.  **Application Routing:**
+            * Modify `src/App.tsx` to set up basic routing using `react-router-dom`.
+            * Include routes for `/login` (mapping to `LoginPage`), `/signup` (mapping to `SignupPage`), and a default `/` route (e.g., a simple placeholder or redirect to login).
+            * **Do NOT add Protected Routes yet.** Just basic routing.
 
         === BACKEND (Node.js + Express + TS) ===
-        Files available in boilerplate:
-        - `src/index.ts` (Server setup - ADD ROUTES HERE)
-        - `package.json` (Express, TypeORM installed - DON'T REGENERATE)
+        Your goal is to provide the API endpoints for login and signup. **All user data MUST be stored and managed IN-MEMORY only. NO DATABASE INTERACTION.**
 
-        File locations to generate:
-        1. Auth Routes:
-        - Path: `src/routes/authRoutes.ts`
-        - Endpoints:
-            * POST /api/auth/login
-            * POST /api/auth/signup
-            * JWT authentication middleware
+        Files to generate/modify:
 
-        2. User Entity:
-        - Path: `src/entities/User.ts`
-        - Fields:
-            * id, email, password (hashed), name, role(enum)
+        1.  **Auth Routes:**
+            * Path: `src/routes/authRoutes.ts`
+            * Endpoints:
+                * `POST /api/auth/login`: Handles user login. Calls `authController.login`.
+                * `POST /api/auth/signup`: Handles user registration. Calls `authController.signup`.
+            * No JWT authentication middleware needed at the route level for this in-memory mock.
 
-        3. Auth Controller:
-        - Path: `src/controllers/authController.ts`
-        - Methods:
-            * login()
-            * signup()
-            * Input validation
+        2.  **Auth Controller:**
+            * Path: `src/controllers/authController.ts`
+            * Requirements:
+                * **Implement IN-MEMORY user storage:** Maintain a simple `Array` or `Map` to store mock user objects (e.g., `{ id, name, email, password_hash, role }`). For simplicity, you can mock password hashing with a simple string concatenation or a placeholder.
+                * **`signup(req, res)` method:**
+                    * Accepts `name`, `email`, `password`, `role`.
+                    * Perform basic input validation.
+                    * Check if email already exists in in-memory storage. If so, return 409 Conflict.
+                    * If new, add user to in-memory storage. Generate a simple `id`.
+                    * Return 201 Created with a success message.
+                * **`login(req, res)` method:**
+                    * Accepts `email`, `password`.
+                    * Find user by email in in-memory storage.
+                    * If user not found or password doesn't match (mock password check), return 401 Unauthorized.
+                    * If successful, return 200 OK with a mock JWT token (e.g., `{ token: "mock_jwt_token_for_" + user.email }`).
+                * No actual password hashing or JWT generation needed for this in-memory mock.
+
+        3.  **Backend Server Entry Point:**
+            * Modify `src/index.ts` to import and use the `authRoutes.ts`. Mount it at `/api/auth`.
 
         === IMPORTANT INSTRUCTIONS ===
-        1. DO NOT regenerate existing boilerplate files
-        2. ONLY create/modify the specified files above
-        3. Assume all dependencies are already installed
-        4. Use existing project structure and conventions
-        5. For React: Use functional components with hooks
-        6. For Express: Use async/await with proper error handling
+        1.  **FOCUS ON IN-MEMORY BACKEND:** Absolutely no database-related code (no TypeORM, no database connections, no `src/entities/User.ts` or similar). All user data handling is strictly in-memory.
+        2.  **Generate ONLY new or modified files** based on the requirements above. If you modify an existing boilerplate file, output its *full and complete new content*.
+        3.  Ensure the frontend and backend are designed to **interact with each other** using the specified API endpoints.
+        4.  The final generated project should require only `npm install` (in both `frontend` and `backend` directories) and `npm run dev` (in each directory) to run.
+        5.  **For Frontend:** Use React functional components with hooks.
+        6.  **For Backend:** Use Express.js, TypeScript, async/await with basic error handling.
 
-        Output format (STRICT JSON):
+        Output format (STRICT JSON, follow this structure EXACTLY):
         ```json
         {
         "files": [
             {
             "file_path": "frontend/src/pages/auth/LoginPage.tsx",
-            "content": "import React from 'react'...",
+            "content": "/* Your generated React code for Login page */",
             "overwrite": false
             },
             {
-            "file_path": "backend/src/routes/authRoutes.ts", 
-            "content": "import express from 'express'...",
+            "file_path": "frontend/src/pages/auth/SignupPage.tsx",
+            "content": "/* Your generated React code for Signup page */",
+            "overwrite": false
+            },
+            {
+            "file_path": "frontend/src/services/authService.ts",
+            "content": "/* Your generated Auth Service code */",
+            "overwrite": false
+            },
+            {
+            "file_path": "frontend/src/App.tsx",
+            "content": "/* FULL content of App.tsx with routing changes */",
+            "overwrite": true
+            },
+            {
+            "file_path": "backend/src/routes/authRoutes.ts",
+            "content": "/* Your generated Auth Routes code */",
+            "overwrite": false
+            },
+            {
+            "file_path": "backend/src/controllers/authController.ts",
+            "content": "/* Your generated Auth Controller code */",
+            "overwrite": false
+            },
+            {
+            "file_path": "backend/src/index.ts",
+            "content": "/* FULL content of backend index.ts with authRoutes import/use */",
             "overwrite": true
             }
         ]

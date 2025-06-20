@@ -9,7 +9,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-index.ts
+#ignore these files
+hello.ts
 BRDtoApp/test.html
 BRDtoApp/templates/website/placeholder.html
 
@@ -23,3 +24,6 @@ build/
 dist/
 npm-debug.log*
 yarn-error.log*
+
+# VSCode Workspace Storage
+.vscode
