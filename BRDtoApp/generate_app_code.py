@@ -32,24 +32,24 @@ gemini_model = genai.GenerativeModel(GEMINI_MODEL_NAME)
 logger.info(f"Using Gemini model: {GEMINI_MODEL_NAME}")
 
 #Helper functions (small resuable utilities)
-def get_boilerplate_file_content(template_name: str, relative_file_paths: list) -> str:
+def get_boilerplate_file_content(project_root_path: str, files_to_include: list) -> str:
     """
     Reads and formats content of specified files from a boilerplate template for AI context.
 
     Args:
-        template_name (str): The name of the boilerplate folder (e.g., 'react-vite-ts-frontend').
-        relative_file_paths (list): A list of file paths relative to the boilerplate template root
+        project_root_path (str): The root directory path of the project.
+        files_to_include (list): A list of file paths relative to the boilerplate template root
                                    (e.g., ['src/App.tsx', 'package.json']).
 
     Returns:
         str: Formatted string containing file paths and their contents,
              suitable for including in the AI prompt.
     """
-    boilerplate_root_path = os.path.join(BOILERPLATE_TEMPLATES_DIR, template_name)
+    base_path = project_root_path # project_root_path is already the correct base path to read from
     context_content = ""
 
-    for rel_path in relative_file_paths:
-        file_full_path = os.path.join(boilerplate_root_path, rel_path)
+    for rel_path in files_to_include:
+        file_full_path = os.path.join(base_path, rel_path)
         if os.path.exists(file_full_path) and os.path.isfile(file_full_path):
             try:
                 with open(file_full_path, 'r', encoding='utf-8') as f:
@@ -94,18 +94,18 @@ def strip_indents_and_format(value: str) -> str:
     return final_result
 
 #copy_boilerplate
-def copy_boilerplate(template_name: str, destination_path: str) -> bool:
+def copy_boilerplate(project_root_path: str, destination_path: str) -> bool:
     """
     Copies a specified boilerplate template to a destination path.
 
     Args:
-        template_name (str): The name of the boilerplate folder (e.g., 'react-vite-ts-frontend').
+        project_root_path (str): The root directory path of the project.
         destination_path (str): The path where the boilerplate should be copied.
     """
-    source_path = os.path.join(BOILERPLATE_TEMPLATES_DIR, template_name)
+    source_path = os.path.join(project_root_path)
 
     if not os.path.exists(source_path):
-        print(f"Error: Boilerplate template '{template_name}' not found at {source_path}")
+        print(f"Error: Boilerplate template not found at {source_path}")
         return False
 
     # Ensure the destination directory exists
@@ -192,47 +192,45 @@ def determine_boilerplates(tech_stack_json: dict) -> dict:
 
 #High-level orchestration functions
 #orchestrate_code_generation
-def orchestrate_code_generation(brd_analysis_json: dict, tech_stack_json: dict, feature_name: str):
+def orchestrate_code_generation(brd_analysis_json: dict, tech_stack_json: dict, project_output_dir: str):
     """
     Orchestrates code generation while maintaining the existing generated_code folder structure.
     Returns paths where boilerplates were copied.
     """
-    # Use your existing generated_code directory
-    generated_code_root = "generated_code"
-    
-    # Create timestamped folder within generated_code
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    sanitized_feature_name = feature_name.replace(" ", "_").replace("/", "_")[:60].strip('_')
-    project_output_dir = os.path.join(generated_code_root, f"{sanitized_feature_name}_{timestamp}")
-    os.makedirs(project_output_dir, exist_ok=True)
-    
-    logger.info(f"Project directory created at: {project_output_dir}")
 
-    # Determine which boilerplates are needed
+    # Determine which boilerplates are expected based on tech stack
     boilerplates_to_use = determine_boilerplates(tech_stack_json)
-    copied_paths = {}
 
-    # Copy the boilerplates
+    # Construct the actual paths where boilerplates *should* exist within project_output_dir
+    # This dictionary will store the actual paths where the AI should read/write
+    copied_paths = {}   
+    
     if 'frontend' in boilerplates_to_use:
-        frontend_dest = os.path.join(project_output_dir, "frontend")
-        if copy_boilerplate(boilerplates_to_use['frontend'], frontend_dest):
-            copied_paths['frontend'] = frontend_dest
-            logger.info(f"Successfully copied frontend boilerplate to {frontend_dest}")
+        actual_frontend_folder_name = boilerplates_to_use['frontend']
+        frontend_path_in_project = os.path.join(project_output_dir, "frontend")
+        if os.path.exists(frontend_path_in_project) and os.path.isdir(frontend_path_in_project):
+            copied_paths['frontend'] = frontend_path_in_project
+        else:
+            logger.warning(f"Frontend boilerplate directory not found or is not a directory at {frontend_path_in_project}. Skipping frontend generation.")
+
     if 'backend' in boilerplates_to_use:
-        backend_dest = os.path.join(project_output_dir, "backend")
-        if copy_boilerplate(boilerplates_to_use['backend'], backend_dest):
-            copied_paths['backend'] = backend_dest
-            logger.info(f"Successfully copied backend boilerplate to {backend_dest}")
+        actual_backend_folder_name = boilerplates_to_use['backend']
+        backend_path_in_project = os.path.join(project_output_dir, "backend")
+        if os.path.exists(backend_path_in_project) and os.path.isdir(backend_path_in_project):
+            copied_paths['backend'] = backend_path_in_project
+        else:
+            logger.warning(f"Backend boilerplate directory not found or is not a directory at {backend_path_in_project}. Skipping backend generation.")
 
     if not copied_paths:
-        logger.error("No boilerplates were successfully copied. Cannot proceed with AI generation.")
-        print("Error: No boilerplates were copied. Check your template directory or tech stack configuration.")
-        return
+        logger.error(f"No boilerplate directories found in {project_output_dir} as expected based on tech stack. Cannot proceed with AI generation.")
+        print(f"Error: No boilerplate directories found in {project_output_dir}. Please ensure boilerplates are copied manually to this location.")
+        return # Exit if no relevant paths are found
+    # END ADDED LINES
     
     # --- Generate Frontend Code (if applicable) ---
     if 'frontend' in copied_paths:
         print(f"\n--- Generating frontend code ---")
-        frontend_boilerplate_name = boilerplates_to_use['frontend']
+        frontend_boilerplate_name = actual_frontend_folder_name
 
         # Define key boilerplate files to include in the prompt context
         if frontend_boilerplate_name == "react_vite_ts":
@@ -261,7 +259,7 @@ def orchestrate_code_generation(brd_analysis_json: dict, tech_stack_json: dict, 
 
         # Get content of boilerplate files to provide as context to the AI
         frontend_context = get_boilerplate_file_content(
-            frontend_boilerplate_name,
+            copied_paths['frontend'],
             frontend_context_files
         )
 
@@ -292,7 +290,7 @@ def orchestrate_code_generation(brd_analysis_json: dict, tech_stack_json: dict, 
     # --- Generate Backend Code (if applicable) ---
     if 'backend' in copied_paths:
         print(f"\n--- Generating backend code ---")
-        backend_boilerplate_name = boilerplates_to_use['backend']
+        backend_boilerplate_name = actual_backend_folder_name
 
         # Define key boilerplate files to include in the prompt context
         if backend_boilerplate_name == "node_js":
@@ -316,7 +314,7 @@ def orchestrate_code_generation(brd_analysis_json: dict, tech_stack_json: dict, 
 
         # Get content of boilerplate files to provide as context to the AI
         backend_context = get_boilerplate_file_content(
-            backend_boilerplate_name,
+            copied_paths['backend'],
             backend_context_files
         )
 
@@ -344,7 +342,7 @@ def orchestrate_code_generation(brd_analysis_json: dict, tech_stack_json: dict, 
         save_generated_code(backend_ai_response, copied_paths['backend'])
         print(f"Backend code generation requested. Output directory: {copied_paths['backend']}")
 
-    print(f"\nOrchestration complete. Boilerplates are in {project_output_dir}. AI will now add/modify code.")
+    print(f"\nAI code generation initiated for project at: {project_output_dir}. AI will now add/modify code.")
     return copied_paths
 
 # --- Code Generation Function ---
@@ -417,7 +415,7 @@ def generate_code_from_requirements(brd_analysis_json, tech_stack_json, specific
     return get_ai_response(prompt)
 
 # --- Function to Save Generated Code to Files ---
-def save_generated_code(ai_response_json_str, output_base_dir="generated_code", project_paths=None):
+def save_generated_code(ai_response_json_str: str, project_paths: dict):
     """
     Parses the AI's JSON response and saves the code content into respective files.
     Now supports both traditional saving and boilerplate-integrated saving.
@@ -435,19 +433,6 @@ def save_generated_code(ai_response_json_str, output_base_dir="generated_code", 
             print(f"Raw AI Response:\n{ai_response_json_str}")
             return
 
-        # NEW: Determine save mode
-        use_boilerplate = project_paths is not None
-        
-        if use_boilerplate:
-            logger.info("Saving files into boilerplate project structure")
-        else:
-            # Traditional saving with timestamped folder
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            feature_dir_name = specific_feature_prompt.replace(" ", "_").replace("/", "_")[:60].strip('_')
-            full_output_dir = os.path.join(output_base_dir, f"{feature_dir_name}_{timestamp}")
-            os.makedirs(full_output_dir, exist_ok=True)
-            logger.info(f"Saving generated code to: {full_output_dir}")
-
         for file_info in response_data["files"]:
             file_path = file_info.get("file_path")
             content = file_info.get("content")
@@ -456,42 +441,49 @@ def save_generated_code(ai_response_json_str, output_base_dir="generated_code", 
                 logger.warning(f"Skipping malformed file entry: {file_info}")
                 continue
 
-            # NEW: Handle both saving modes
-            if use_boilerplate:
-                # Boilerplate-integrated saving
-                if file_path.startswith("frontend/"):
-                    full_path = os.path.join(project_paths['frontend'], file_path)
-                elif file_path.startswith("backend/"):
-                    full_path = os.path.join(project_paths['backend'], file_path)
-                else:
-                    logger.warning(f"Skipping file with invalid path prefix: {file_path}")
-                    continue
+            # Determine the full path based on the file_path prefix (frontend/ or backend/)
+            full_path = None
+            if file_path and file_path.startswith("frontend/") and 'frontend' in project_paths:
+                # Ensure the 'frontend/' prefix itself is not duplicated in the join
+                # Example: os.path.join(project_paths['frontend'], 'src/App.tsx')
+                # not os.path.join(project_paths['frontend'], 'frontend/src/App.tsx')
+                # So we remove the "frontend/" prefix from file_path before joining
+                relative_file_path = file_path[len("frontend/"):]
+                full_path = os.path.join(project_paths['frontend'], relative_file_path)
+            elif file_path and file_path.startswith("backend/") and 'backend' in project_paths:
+                # Same for backend
+                relative_file_path = file_path[len("backend/"):]
+                full_path = os.path.join(project_paths['backend'], relative_file_path)
             else:
-                # Traditional saving
-                full_path = os.path.join(full_output_dir, file_path)
-                abs_output_dir = os.path.abspath(full_output_dir)
-                abs_file_path = os.path.abspath(full_path)
-                
-                # Security check
-                if not abs_file_path.startswith(abs_output_dir):
-                    logger.warning(f"Skipping potentially malicious path: {file_path}")
-                    continue
+                logger.warning(f"Skipping file with invalid or unhandled path prefix: {file_path}")
+                continue
 
-            os.makedirs(os.path.dirname(full_path), exist_ok=True)
-            with open(full_path, "w", encoding="utf-8") as f:
-                f.write(content)
-            logger.info(f"Saved: {full_path}")
+            if full_path:
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                with open(full_path, "w", encoding="utf-8") as f:
+                    f.write(content)
+                logger.info(f"Saved: {full_path}")
         
-        if not use_boilerplate:
-            print(f"\nCode generation complete. Files saved to: {os.path.abspath(full_output_dir)}")
-            print("You can now navigate to test the generated code.")
-
+        print(f"\nCode generation complete. Files saved/updated in project directories.")
+        # You might want to print the actual project_paths['frontend'] or project_paths['backend'] for user clarity
+        if 'frontend' in project_paths:
+            print(f"Frontend code in: {os.path.abspath(project_paths['frontend'])}")
+        if 'backend' in project_paths:
+            print(f"Backend code in: {os.path.abspath(project_paths['backend'])}")
+        
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse AI response as JSON: {e}", exc_info=True)
         print("Error: Invalid JSON response from AI.")
         print(f"Raw Response:\n{ai_response_json_str}")
     except Exception as e:
         logger.critical(f"Error while saving files: {e}", exc_info=True)
+
+MY_PROJECT_NAME = "WizRD"
+GENERATED_CODE_ROOT = "generated_code"
+PERMANENT_PROJECT_DIR = os.path.join(GENERATED_CODE_ROOT, MY_PROJECT_NAME)
+os.makedirs(PERMANENT_PROJECT_DIR, exist_ok=True)
+print(f"Working in project directory: {PERMANENT_PROJECT_DIR}")
+print(f"Ensure boilerplates are manually copied into '{os.path.join(PERMANENT_PROJECT_DIR, 'frontend')}' and '{os.path.join(PERMANENT_PROJECT_DIR, 'backend')}'")
 
 # --- Main Execution Block ---
 if __name__ == "__main__":
@@ -881,21 +873,20 @@ if __name__ == "__main__":
             "overwrite": true
             }
         ]
-        }
         """.strip()
 
     # 1. Copy boilerplates first
     project_paths = orchestrate_code_generation(
-        brd_analysis_json=brd_analysis_from_app,
-        tech_stack_json=tech_stack_identified,
-        feature_name="user_auth"  # Or make this dynamic
+        brd_analysis_json = brd_analysis_from_app,
+        tech_stack_json = tech_stack_identified,
+        project_output_dir = PERMANENT_PROJECT_DIR
     )
     # --- Call the Code Generation Function ---
     ai_raw_response = generate_code_from_requirements(
-        brd_analysis_json=brd_analysis_from_app,
-        tech_stack_json=tech_stack_identified,
-        specific_feature_prompt=specific_feature_prompt,
-        default_design_prompt=default_design_prompt
+        brd_analysis_json = brd_analysis_from_app,
+        tech_stack_json = tech_stack_identified,
+        specific_feature_prompt = specific_feature_prompt,
+        default_design_prompt = default_design_prompt
     )
 
     # --- Save the Generated Code ---
