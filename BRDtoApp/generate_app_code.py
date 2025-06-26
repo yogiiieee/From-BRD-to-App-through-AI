@@ -8,6 +8,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 import re
 import shutil
+import textwrap
 
 # Define the base directory for your boilerplate templates
 # Using absolute path to ensure correct location
@@ -82,14 +83,26 @@ def get_boilerplate_file_content(project_root_path: str, files_to_include: list)
 
 #strip_indents_and_format
 def strip_indents_and_format(value: str) -> str:
+    """
+    Removes common leading indentation from a multiline string and then
+    strips any remaining leading/trailing whitespace (including newlines).
+    This function is designed to clean up multi-line Python string literals
+    (like docstrings or prompts) while preserving their internal formatting.
+
+    Args:
+        value (str): The input string to process.
+
+    Returns:
+        str: The cleaned string with common leading indentation and
+             outer whitespace removed.
+
+    Raises:
+        TypeError: If the input value is not a string.
+    """
     if not isinstance(value, str):
         raise TypeError("Input to strip_indents_and_format must be a string.")
-
-    lines = value.split('\n')
-    trimmed_lines = [line.strip() for line in lines]
-    rejoined_string = '\n'.join(trimmed_lines)
-    result_without_leading_block_indent = rejoined_string.lstrip()
-    final_result = re.sub(r'[\r\n]$', '', result_without_leading_block_indent)
+    dedented_string = textwrap.dedent(value)
+    final_result = dedented_string.strip()
 
     return final_result
 
@@ -464,7 +477,8 @@ if __name__ == "__main__":
 
     # --- INPUT 1: System Prompt for Architecture ---
     system_prompt_architecture = """
-        You are an expert full-stack web application architect and senior software developer. Your primary role is to generate or modify code for a React/Vite/TypeScript frontend and a Node.js/Express/TypeScript backend. Your output must be high-quality, maintainable, and strictly adhere to the established project architecture and conventions.
+        You are WizRD, an expert AI assistant and exceptional senior software developer with vast knowledge across multiple programming languages, frameworks, and best practices.
+        Your primary role is to generate or modify code for a React/Vite/TypeScript frontend and a Node.js/Express/TypeScript backend. Your output must be high-quality, maintainable, and strictly adhere to the established project architecture and conventions.
 
         === PROJECT ARCHITECTURE BLUEPRINT ===
 
@@ -492,15 +506,37 @@ if __name__ == "__main__":
         * **`frontend/src/pages/`**: Directory for page-level components (e.g., `LoginPage.tsx`, `SignupPage.tsx`).
         * **`frontend/src/components/`**: Directory for reusable UI components.
         * **`frontend/src/services/`**: Directory for frontend API service functions.
+        * **`frontend/postcss.config.js`**: PostCSS configuration, typically used with Tailwind CSS.
+        * **`frontend/tailwind.config.js`**: Tailwind CSS configuration.
+        * **`frontend/vite.config.js`**: Vite build tool configuration for the frontend.
         * **`backend/src/index.ts`**: Main backend server entry point, initializes Express, registers routes.
         * **`backend/src/routes/`**: Directory for defining backend API endpoints (e.g., `authRoutes.ts`, `userRoutes.ts`).
         * **`backend/src/controllers/`**: Directory for implementing backend business logic (e.g., `authController.ts`, `userController.ts`).
         * **`backend/src/middleware/`**: Directory for backend Express middleware.
         * **`package.json`**: For managing project dependencies.
         * **`tsconfig.json`**: TypeScript configuration.
+        * **`tsconfig.node.json`**: TypeScript configuration specific to Node.js environments (often for Vite config).
         * **`.env.example`**: Example environment variables.
 
         === DECISION-MAKING GUIDANCE FOR FILE CREATION/MODIFICATION ===
+        IMPORTANT: Git is NOT available.
+        CRITICAL: Think HOLISTICALLY and COMPREHENSIVELY
+        Consider ALL relevant files in the project when making decisions.
+        Analyze the entire project context and dependencies.
+        Anticipate potential impacts on other parts of the system.
+
+        CRITICAL: Always provide the FULL, updated content of the file. This means:
+        - Include ALL code, even if parts are unchanged
+        - NEVER use placeholders like "// rest of the code remains the same..." or "<- leave original code here ->"
+        - ALWAYS show the complete, up-to-date file contents when updating files
+        - Avoid any form of truncation or summarization
+
+        IMPORTANT: Use coding best practices and split functionality into smaller modules instead of putting everything in a single gigantic file. Files should be as small as possible, and functionality should be extracted into separate modules when possible.
+        - Ensure code is clean, readable, and maintainable.
+        - Adhere to proper naming conventions and consistent formatting.
+        - Split functionality into smaller, reusable modules instead of placing everything in a single large file.
+        - Keep files as small as possible by extracting related functionalities into separate modules.
+        - Use imports to connect these modules together effectively.
 
         1.  **Autonomous File Decision-Making:**
             * Based on the provided BRD analysis, tech stack, and the architectural blueprint above, **infer** which new files are required and which existing files need modification to implement the requested features.
@@ -512,6 +548,7 @@ if __name__ == "__main__":
                 * `frontend/src/App.tsx` (for new routes, global contexts).
                 * `backend/src/index.ts` (for registering new route modules, global middleware).
                 * `package.json` (for new npm dependencies).
+                * Frontend config files (`postcss.config.js`, `tailwind.config.js`, `vite.config.js`) if changes are needed.
             * If a feature extends existing functionality (e.g., adding a new function to `authService.ts`), provide the **full, updated content** of that existing file.
 
         3.  **Code Quality & Modularity:**
@@ -546,8 +583,8 @@ if __name__ == "__main__":
             }
             // ... potentially more file objects
         ]
-        ```
-        """
+        }
+    """.strip()
 
     # --- INPUT 2: Default Design Prompt ---
     default_design_prompt = """
@@ -582,8 +619,17 @@ if __name__ == "__main__":
         * When integrating with backend APIs, use the `frontend/src/services/` pattern.
 
         By adhering to these principles, the generated code will consistently reflect the high-quality, beautiful design standard required.
-        """
+        """.strip()
 
+
+        #Things to add in the default_design_prompt later on in App (regarding BRD)
+        # --- UI Design Prioritization & Fallback ---
+        # IMPORTANT:
+        # 1.  Prioritize UI/UX details provided explicitly within the Business Requirements Document (BRD) Analysis. If the BRD contains specific requirements for colors, layouts, or component styles, these take precedence.
+        # 2.  If the BRD's UI/UX details are absent, generic, or insufficient, then fully implement the detailed design system described below. This serves as the default, high-quality aesthetic to ensure a beautiful and consistent user interface.
+        # 3.  Regardless of BRD specifics, always adhere to the best practices and styling framework guidelines provided below (e.g., use of Tailwind CSS, responsive layouts, clean React structure). These are non-negotiable for production-ready code.
+        # --- End UI Design Prioritization ---
+        
     # --- INPUT 3: Structured BRD Analysis Output ---
     brd_analysis_from_app = {
         "project_summary": "Manage registration, authentication, and authorization for dealerships, agencies, and super admins. Enable dealerships to post jobs and agencies to manage and share candidate data. Facilitate communication and collaboration between dealerships and agencies. Provide dashboards for super admins, dealership HRs, and agencies to track key metrics.",
@@ -830,76 +876,81 @@ if __name__ == "__main__":
 
     # --- INPUT 5: Specific Feature Prompt ---
     specific_feature_prompt = """
-    Generate the complete full-stack application as described by the provided BRD Analysis. Implement ALL themes, epics, and user stories, including their associated tasks and acceptance criteria.
+        Implement the full **Login and Signup functionality** for the application, AND the **Super Admin Agency Approval** feature (User Story US-003).
 
-    **CRITICAL INSTRUCTION: ALL BACKEND DATA STORAGE MUST BE IN-MEMORY.**
-    * **DO NOT** generate any database models, schema definitions, database connection code, ORM configurations (e.g., TypeORM entities, migrations), or database-specific queries.
-    * For any data that would typically be stored in a database (users, jobs, candidates, chat messages, dashboard metrics), you **MUST** implement it using simple **in-memory data structures** (e.g., JavaScript Arrays or Maps within your backend controllers or a dedicated in-memory store module).
-    * Mock persistence: Assume data is lost when the server restarts.
+        **Overall Goals:**
+        * A user should be able to create an account via the signup page.
+        * A user should be able to log into an existing account via the login page.
+        * The login and signup flows must be interconnected (e.g., links between the pages).
+        * A Super Admin must be able to view pending agency registration requests and approve or reject them.
 
-        **APPLICATION SCOPE: Implement ALL the following Themes and their nested Epics and User Stories from the BRD Analysis:**
+        **CRITICAL INSTRUCTION: ALL BACKEND DATA STORAGE MUST BE IN-MEMORY.**
+        * **DO NOT** generate any database models, schema definitions, database connection code, ORM configurations (e.g., TypeORM entities, migrations), or database-specific queries.
+        * For any data that would typically be stored in a database (users, pending registrations, roles), you **MUST** implement it using simple **in-memory data structures** (e.g., JavaScript Arrays or Maps within your backend controllers or a dedicated in-memory store module).
+        * Mock persistence: Assume data is lost when the server restarts.
 
-        --- BRD Features to Implement (Directly from brd_analysis_json) ---
+        **Frontend Requirements:**
+        * **Login Page:**
+            * Allow users to input Email and Password.
+            * Include "Remember me" checkbox and "Forgot password" link (can be placeholders).
+            * Button to submit login credentials.
+            * Basic client-side validation for input fields.
+            * On successful login, store a mock JWT token (in localStorage or a simple in-memory variable for demo).
+            * Redirect to a placeholder dashboard/home page upon successful login, or to an admin dashboard if the user is a Super Admin.
+            * Display clear error messages for invalid credentials or other login failures.
+        * **Signup Page (US-001, US-002 details combined):**
+            * Allow users to input Full Name, Username, Email, Password, and Confirm Password.
+            * Include a Role selection (e.g., dropdown or radio buttons for "Dealership" / "Agency").
+            * For Dealership HR registration, include a field for "Mahindra Dealership Code."
+            * For Recruitment Agency registration, display a message indicating that their registration is pending approval after submission.
+            * Button to submit registration details.
+            * Basic client-side validation for input fields (e.g., email format, password matching).
+            * Display clear error messages for invalid inputs or if email/username already exists.
+            * On successful registration, redirect to the login page or display a success message.
+        * **Admin Agency Approval Page (for US-003):**
+            * Create a new frontend page (e.g., `/admin/approvals` or part of a simple admin dashboard).
+            * This page should only be accessible to users with the "Super Admin" role (implement a basic client-side mock check for the token/role).
+            * Display a list or table of all pending agency registration requests (fetch from backend).
+            * For each pending request, provide "Approve" and "Reject" buttons.
+            * Display a confirmation or success message upon approval/rejection.
+            * Agencies whose requests are rejected should be marked as 'rejected' in the in-memory store, and should not be able to log in with agency privileges.
+        * **API Service Integration:** Frontend components must interact with backend API endpoints for login, signup, and admin approvals.
+        * **Application Routing:** Ensure `react-router-dom` is configured in `App.tsx` to handle navigation between `/login`, `/signup`, and `/admin/approvals` routes.
 
-        {json.dumps(brd_analysis_json, indent=2)}
+        **Backend Requirements:**
+        * **API Endpoints:**
+            * Existing: `POST /api/auth/signup` and `POST /api/auth/login`.
+            * New: `GET /api/admin/pending-agencies` (to fetch pending agency requests) and `POST /api/admin/approve-reject-agency` (to handle approval/rejection).
+        * **IN-MEMORY User Storage:** **All user data MUST be stored and managed exclusively IN-MEMORY.** Use a simple array or map (e.g., `inMemoryUsers = []`) to store mock user objects (e.g., `{ id, name, email, password_hash, role, status: 'pending' | 'approved' | 'rejected' }`).
+            * **NO DATABASE INTERACTION, NO ORM, NO DATABASE MODELS, NO MIGRATIONS, NO DATABASE-SPECIFIC QUERIES.**
+        * **Signup Logic:**
+            * Accepts Full Name, Username, Email, Password, Role.
+            * Perform basic server-side validation.
+            * Check for existing email/username in in-memory store. Return 409 Conflict if found.
+            * Generate a simple unique ID for new users.
+            * For password, apply a *mock* hashing (e.g., a simple string transformation or concatenation).
+            * Add the new user to the in-memory store. **For 'Agency' roles, set their initial `status` to 'pending'.** For 'Dealership HR' or 'Super Admin', set `status` to 'approved'.
+            * Return 201 Created on success.
+        * **Login Logic:**
+            * Accepts Email and Password.
+            * Find user in in-memory store by email.
+            * Compare provided password with stored password (mock comparison).
+            * **Before authenticating, check user's `status`:** If an 'Agency' user's status is 'pending' or 'rejected', prevent login and return an appropriate error (e.g., 403 Forbidden).
+            * Return 401 Unauthorized for invalid credentials.
+            * On successful login, return 200 OK with a *mock* JWT token (e.g., `"mock_jwt_token_for_user_email_and_role"`).
+        * **Admin Approval Logic (for US-003):**
+            * **`GET /api/admin/pending-agencies`:** Return a list of all users from in-memory store whose `role` is 'Agency' and `status` is 'pending'.
+            * **`POST /api/admin/approve-reject-agency`:**
+                * Accepts `userId` and `action` ('approve' or 'reject').
+                * Find the user in the in-memory store by `userId`.
+                * Update the user's `status` to 'approved' or 'rejected' based on `action`.
+                * Return 200 OK with a success message.
+            * Implement a basic authorization check for these admin endpoints: only users with `role: 'Super Admin'` should be able to access them (mock check based on token data).
 
-        --- End BRD Features ---
-
-        **Detailed Implementation Requirements:**
-
-        1.  **User Management Theme (including Registration and Authentication Epic):**
-            * Implement **Login and Signup pages** on the frontend, adhering to the design principles from `default_design_prompt` (including the specific design elements for the Signup Page: logo, social login buttons, dynamic info slider, CTA box).
-            * Frontend should handle user input, validation, and API calls via `src/services/authService.ts`.
-            * Backend must provide `POST /api/auth/signup` and `POST /api/auth/login` endpoints.
-            * Backend `authController.ts` will manage user data in an **in-memory array/map**.
-            * For dealership registration (US-001), include a field for "Mahindra Dealership Code." Implement its basic validation in-memory (e.g., check if it's a non-empty string for now).
-            * For agency registration (US-002), include a mechanism for "request approval" (frontend shows a message like "Waiting for admin approval"; backend marks agency status as 'pending' in-memory).
-            * For Super Admin approval (US-003): Create a basic admin UI (e.g., a simple table on a `/admin/agency-approvals` route) where Super Admins can 'approve' or 'reject' pending agency registrations. This should update the in-memory agency status.
-            * Authentication should use *mock* JWT tokens as described in the system prompt.
-            * Implement user roles: Super Admin, Dealership HR, Recruitment Agency. Store these roles in-memory with user data.
-
-        2.  **Job Posting and Candidate Management Theme:**
-            * **Job Posting Epic (US-004):**
-                * Frontend UI for Dealership HR to post jobs (e.g., `/jobs/post`).
-                * Backend API for job creation (e.g., `POST /api/jobs`).
-                * Implement **in-memory job storage** (array/map).
-                * For "auto-filled details from a master list," create a simple **in-memory mock master list of job titles/details** (e.g., an array of objects) on the backend and provide an endpoint for the frontend to fetch it (e.g., `GET /api/job-master-data`).
-            * **Candidate Management Epic:**
-                * **Candidate Upload (US-005):**
-                    * Frontend UI for Recruitment Agencies to upload candidate data (e.g., `/candidates/upload`).
-                    * Implement mock CSV file upload on the frontend (e.g., a text area where CSV data can be pasted, or a simulated file input).
-                    * Backend API for processing candidate CSV data (e.g., `POST /api/candidates/upload`).
-                    * Implement **in-memory candidate storage** (array/map).
-                    * Implement simple in-memory duplicate profile detection based on email/phone number. Generate a mock report.
-                * **Candidate Sharing (US-006):**
-                    * Frontend UI for Agencies to view their candidates and select/share with dealerships for specific job postings (e.g., `/candidates/manage`).
-                    * Backend API for sharing candidates (e.g., `POST /api/candidates/share`).
-                    * Implement **in-memory storage for shared candidates** (e.g., linking a candidate ID to a job ID in an in-memory map).
-                    * The "matching percentage" can be a simple placeholder calculation (e.g., random number or based on a keyword match in-memory).
-
-        3.  **Communication and Collaboration Theme:**
-            * **Chat Functionality Epic (US-007):**
-                * Implement a basic chat interface on the frontend (e.g., `/chat` or integrated into candidate view).
-                * Backend API for sending/receiving chat messages (e.g., `POST /api/chat/message`, `GET /api/chat/history`).
-                * Implement **in-memory chat history storage** (e.g., an array of message objects).
-                * No real-time WebSocket for now; use simple polling (e.g., frontend fetches new messages every few seconds).
-                * Implement basic mock notifications (e.g., console log or simple UI message).
-
-        4.  **Reporting and Dashboards Theme:**
-            * **Dashboard Implementation Epic (US-008, US-009, US-010):**
-                * Develop basic dashboard UIs for Super Admin, Dealership HR, and Recruitment Agency roles. Each role will have its own dashboard route (e.g., `/dashboard/admin`, `/dashboard/dealership`, `/dashboard/agency`).
-                * These dashboards should display placeholder data or aggregated counts from the **in-memory stores** (users, jobs, candidates, chat messages).
-                * Focus on basic layout and display of key metrics. No complex charting libraries or customization logic beyond basic display is needed for this initial generation.
-
-        **General Implementation Notes (Re-emphasis from System Prompt):**
-
-        * **Modular Code:** Break down components, controllers, and services into logical, small, and reusable files.
-        * **Error Handling:** Include basic error handling on both frontend (displaying messages) and backend (returning appropriate HTTP status codes).
-        * **Routing:** Ensure `react-router-dom` is fully utilized for navigation, and Express routes are correctly registered.
-        * **Security (Mock):** For authentication, generate *mock* JWT tokens. For authorization, implement simple in-memory checks based on the user's `role` (e.g., `if (user.role !== 'admin') return res.status(403)`).
-        * **NO EXTERNAL LIBRARIES for DB/Auth unless mock:** Do not use `bcrypt` or `jsonwebtoken` if they require npm install and are not part of basic Node.js. Implement basic string transformations for mock hashing/tokens.
-
-        --- End of `specific_feature_prompt` ---
+        **UI Design and Aesthetics (AI should apply this from default_design_prompt):**
+        * The generated UI must be visually appealing, modern, and consistent with the design system provided in the `default_design_prompt`, including gradients, glass effects, rounded elements, and specified typography/colors.
+        * **Specifically for Signup Page:** Integrate the visual design elements provided previously: a logo, social login buttons (Google, GitHub, Facebook SVGs or icons), a dynamic information slider with navigation controls, and a prominent call-to-action (CTA) box, all styled using Tailwind CSS classes based on the `default_design_prompt`.
+        * **For Admin Approval Page:** Design a clean, modern table or list view for pending requests, with clearly visible Approve/Reject buttons, consistent with the overall design language.
     """.strip()
 
     # 1. Copy boilerplates first
