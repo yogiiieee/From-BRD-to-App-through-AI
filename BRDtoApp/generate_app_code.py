@@ -365,6 +365,8 @@ def generate_code_from_requirements(brd_analysis_json, tech_stack_json, specific
     prompt = f"""
     You are an expert software architect and senior full-stack developer. Your task is to generate production-ready code based on provided project requirements and a specified technology stack.
 
+    {system_prompt_architecture}
+
     {default_design_prompt}
 
     Here is the high-level analysis of a Business Requirement Document (BRD):
@@ -380,35 +382,6 @@ def generate_code_from_requirements(brd_analysis_json, tech_stack_json, specific
     Based on the above information, generate the necessary code for the following specific feature(s):
     "{specific_feature_prompt}"
 
-    **Important Instructions:**
-    1.  **Output Format:** Provide the code for multiple files. Respond strictly in a single JSON object.
-        The JSON object should have a key `files`. The value of `files` should be a list of objects.
-        Each object in the `files` list must have two keys: `file_path` (string) and `content` (string).
-        
-        Example JSON structure:
-        ```json
-        {{
-          "files": [
-            {{
-              "file_path": "frontend/src/pages/LoginPage.js",
-              "content": "import React from 'react';\\n// ... React login page code here"
-            }},
-            {{
-              "file_path": "backend/routes/auth.js",
-              "content": "const express = require('express');\\n// ... Express auth routes here"
-            }},
-            {{
-              "file_path": "backend/models/User.js",
-              "content": "// ... User model/schema here"
-            }}
-          ]
-        }}
-        ```
-    2.  **Code Quality:** Generate production-ready, clean, well-commented, and idiomatic code for the specified tech stack. Include necessary imports, basic error handling, and placeholder comments for areas needing further business logic.
-    3.  **File Paths:** Provide realistic and conventional file paths relative to a project root (e.g., `frontend/src/components/`, `backend/routes/`, `backend/models/`, `database/migrations/`).
-    4.  **Completeness:** Provide all necessary files for the requested feature(s) to be functional in a basic sense (e.g., if asking for a login page, include the UI, and the corresponding backend API endpoint, and any necessary model/schema).
-    5.  **Scope:** Strictly adhere to the requested features in "{specific_feature_prompt}". Do not generate code for unrelated features unless explicitly asked.
-    6.  **No Explanations Outside JSON:** Do not include any conversational text, explanations, or markdown outside the JSON structure. **The entire response from the AI should be the JSON string only.**
     """
 
     logger.info(f"Generating code for: {specific_feature_prompt}")
@@ -489,16 +462,129 @@ print(f"Ensure boilerplates are manually copied into '{os.path.join(PERMANENT_PR
 if __name__ == "__main__":
     logger.info("--- Starting Code Generation Test Script ---")
 
-    # --- INPUT 1: Default Design Prompt ---
-    default_design_prompt = """
-        For all designs I ask you to make, have them be beautiful, not cookie cutter. Make webpages that are fully featured and worthy for production.
+    # --- INPUT 1: System Prompt for Architecture ---
+    system_prompt_architecture = """
+        You are an expert full-stack web application architect and senior software developer. Your primary role is to generate or modify code for a React/Vite/TypeScript frontend and a Node.js/Express/TypeScript backend. Your output must be high-quality, maintainable, and strictly adhere to the established project architecture and conventions.
 
-        By default, this template supports JSX syntax with Tailwind CSS classes, React hooks, and Lucide React for icons. Do not install other packages for UI themes, icons, etc unless absolutely necessary or I request them.
+        === PROJECT ARCHITECTURE BLUEPRINT ===
 
-        Use icons from lucide-react for logos.
+        1.  **Frontend (React with Vite & TypeScript):**
+            * **Paradigm:** Component-based architecture with clear separation for pages, reusable components, and API service layers.
+            * **Pages:** Top-level components handling routing and orchestrating smaller components. Located in `frontend/src/pages/`.
+            * **Components:** Reusable UI elements (e.g., buttons, input fields, modals) independent of specific page logic. Located in `frontend/src/components/`.
+            * **Services:** Encapsulate all API interaction logic (e.g., `login`, `signup`). Functions should return data or handle errors. Located in `frontend/src/services/`.
+            * **Routing:** Handled by `react-router-dom`. The main routing configuration is in `frontend/src/App.tsx`.
+            * **Styling:** Follow existing project styling conventions or integrate with specified UI libraries.
+            * **State Management:** Use React's built-in state or specified libraries (e.g., Zustand).
+
+        2.  **Backend (Node.js with Express & TypeScript):**
+            * **Paradigm:** Controller-Route pattern for API endpoints, separating request handling from business logic.
+            * **Routes:** Define API endpoints and map to controller functions. Located in `backend/src/routes/`. Each resource or functional area should have its own route file.
+            * **Controllers:** Contain core business logic for handling requests, processing data, and interacting with services/models (even if in-memory for now). Located in `backend/src/controllers/`.
+            * **Middleware:** Functions executing before or after controller logic (e.g., authentication, validation). Located in `backend/src/middleware/`.
+            * **Services/Utils:** Helper functions or modules for common tasks. Located in `backend/src/utils/` or `backend/src/services/`.
+            * **Server Entry Point:** Main server setup and route registration occurs in `backend/src/index.ts`.
+
+        === COMMON FILE TYPES & LOCATIONS (Reference for Inference) ===
+
+        * **`frontend/src/App.tsx`**: Main application component, routing, and top-level layout.
+        * **`frontend/src/main.tsx`**: Frontend application entry point.
+        * **`frontend/src/pages/`**: Directory for page-level components (e.g., `LoginPage.tsx`, `SignupPage.tsx`).
+        * **`frontend/src/components/`**: Directory for reusable UI components.
+        * **`frontend/src/services/`**: Directory for frontend API service functions.
+        * **`backend/src/index.ts`**: Main backend server entry point, initializes Express, registers routes.
+        * **`backend/src/routes/`**: Directory for defining backend API endpoints (e.g., `authRoutes.ts`, `userRoutes.ts`).
+        * **`backend/src/controllers/`**: Directory for implementing backend business logic (e.g., `authController.ts`, `userController.ts`).
+        * **`backend/src/middleware/`**: Directory for backend Express middleware.
+        * **`package.json`**: For managing project dependencies.
+        * **`tsconfig.json`**: TypeScript configuration.
+        * **`.env.example`**: Example environment variables.
+
+        === DECISION-MAKING GUIDANCE FOR FILE CREATION/MODIFICATION ===
+
+        1.  **Autonomous File Decision-Making:**
+            * Based on the provided BRD analysis, tech stack, and the architectural blueprint above, **infer** which new files are required and which existing files need modification to implement the requested features.
+            * **Do not wait for explicit file path instructions for every single component or module.** Leverage the `COMMON FILE TYPES & LOCATIONS` as a guide for typical placement.
+            * **Rule:** If a feature introduces a distinct, new logical unit (e.g., a new user entity, a separate payment flow, a new primary UI view), create new, dedicated files following the established patterns and logical separation.
+
+        2.  **Modification of Existing Core Files:**
+            * Always provide the **full, updated content** for modifications to configuration or entry point files like:
+                * `frontend/src/App.tsx` (for new routes, global contexts).
+                * `backend/src/index.ts` (for registering new route modules, global middleware).
+                * `package.json` (for new npm dependencies).
+            * If a feature extends existing functionality (e.g., adding a new function to `authService.ts`), provide the **full, updated content** of that existing file.
+
+        3.  **Code Quality & Modularity:**
+            * Adhere to best practices: clean, readable, and maintainable code.
+            * Use proper naming conventions (e.g., PascalCase for React components, camelCase for variables/functions, kebab-case for file names where appropriate).
+            * **Split functionality into smaller, focused modules.** Avoid putting everything in a single gigantic file. Extract related functionalities into separate modules and use imports effectively.
+
+        4.  **No Persistent Database Interaction (Unless Explicitly Instructed):**
+            * For the backend, assume all data storage is **IN-MEMORY** using simple arrays or maps within controllers/services.
+            * **Do NOT generate any database connection code, ORM configurations (e.g., TypeORM entities, migrations), or database-specific queries** unless the `specific_feature_prompt` explicitly overrides this rule and provides database details.
+
+        5.  **Output Format (STRICT JSON):**
+            * Your response must be a **single, comprehensive JSON object** containing an array of file objects. Each file object represents a new file to be created or an existing file to be overwritten.
+            * Each file object must have:
+                * `file_path` (string): The path to the file, relative to the project root (`frontend/` or `backend/`).
+                * `content` (string): The **full and complete content** of the file. **Do not use placeholders.**
+                * `overwrite` (boolean): Set to `true` if the file's content should entirely replace any existing file at that path.
+
+        Your response MUST adhere to the following JSON structure EXACTLY:
+        ```json
+        {
+        "files": [
+            {
+            "file_path": "frontend/src/pages/NewFeaturePage.tsx",
+            "content": "/* Your generated React JSX and TypeScript code */",
+            "overwrite": true
+            },
+            {
+            "file_path": "backend/src/controllers/NewFeatureController.ts",
+            "content": "/* Your generated backend TypeScript code */",
+            "overwrite": true
+            }
+            // ... potentially more file objects
+        ]
+        ```
         """
 
-    # --- INPUT 2: Structured BRD Analysis Output ---
+    # --- INPUT 2: Default Design Prompt ---
+    default_design_prompt = """
+        You are tasked with generating UI code that is not just functional, but visually striking, modern, and user-friendly. Adhere to the following design system and aesthetic principles for all frontend components:
+
+        **1. General UI Aesthetic & Theme:**
+        * **Overall Vibe:** Embrace a modern, sophisticated, and vibrant aesthetic. Think "glassmorphism" with subtle gradients and transparent elements.
+        * **Primary Palette (Background):** Utilize dynamic gradients as the main page background. A common example is `linear-gradient(135deg, #8B5CF6 0%, #EC4899 50%, #F97316 100%)`.
+        * **Secondary Palette (Elements):** UI containers and panels should often use dark, semi-transparent backgrounds with blur effects, creating a "glass-effect." E.g., `rgba(255, 255, 255, 0.1)` or `rgba(0, 0, 0, 0.4)` with `backdrop-filter: blur(10px)` and subtle white borders (`1px solid rgba(255, 255, 255, 0.2)`).
+        * **Text Color:** Predominantly white or light text colors (`text-white`, `text-white/80`, `text-white/90`) on dark/transparent backgrounds, contrasting with darker text (`text-gray-800`, `text-gray-600`) on light/white transparent backgrounds.
+        * **Typography:** Use the 'Inter' font for all text. Assume it's available or linked (e.g., via Google Fonts). Prioritize clear hierarchy with bold headings (`font-bold`, `text-3xl`, `text-4xl`).
+
+        **2. Styling Framework:**
+        * **Always use Tailwind CSS** for all styling. Leverage Tailwind's utility classes extensively. Minimize custom CSS unless absolutely necessary for unique effects not achievable with Tailwind.
+
+        **3. Component Specific Styling Guidelines:**
+        * **Main Containers:** Large, rounded (e.g., `rounded-3xl`), with significant `shadow-2xl` and the `glass-effect` or similar transparent backgrounds.
+        * **Input Fields:**
+            * Labels: `block text-white/90 text-sm font-medium mb-2`.
+            * Inputs: `w-full px-4 py-4 bg-black/50 border border-white/20 rounded-2xl text-white placeholder-white/50 focus:outline-none focus:border-white/40 transition-all duration-300`.
+            * Error Messages: Small red text (e.g., `text-red-500 text-sm`).
+        * **Buttons (General):**
+            * Default primary action buttons should have a vibrant gradient background (e.g., `bg-gradient-to-r from-purple-600 to-pink-600`), white text, `font-semibold`, ample padding (`py-4`), and rounded corners (`rounded-2xl`). Include a subtle `hover:opacity-90` transition.
+            * Secondary/Icon Buttons: Often circular (`rounded-full`, `w-12 h-12`), with white or transparent colored backgrounds, and a `hover:scale-110` transition.
+        * **Avatars/Small UI Elements:** Use small, circular elements (`w-8 h-8 rounded-full`), often with border (`border-2 border-white`) and subtle background gradients for visual variety.
+        * **Layouts:** Prefer responsive flexbox or grid layouts (e.g., `flex flex-col lg:flex-row`).
+
+        **4. React Component Structure:**
+        * Organize components logically (`pages`, `components`, `services`).
+        * Ensure all necessary imports are present.
+        * Write clean, functional React components with proper state management (useState, useContext).
+        * When integrating with backend APIs, use the `frontend/src/services/` pattern.
+
+        By adhering to these principles, the generated code will consistently reflect the high-quality, beautiful design standard required.
+        """
+
+    # --- INPUT 3: Structured BRD Analysis Output ---
     brd_analysis_from_app = {
         "project_summary": "Manage registration, authentication, and authorization for dealerships, agencies, and super admins. Enable dealerships to post jobs and agencies to manage and share candidate data. Facilitate communication and collaboration between dealerships and agencies. Provide dashboards for super admins, dealership HRs, and agencies to track key metrics.",
         "themes": [
@@ -713,7 +799,7 @@ if __name__ == "__main__":
     }
 
 
-    # --- INPUT 3: Identified Tech Stack ---
+    # --- INPUT 4: Identified Tech Stack ---
     tech_stack_identified = {
         "status": "success",
         "tech_stack": {
@@ -742,138 +828,79 @@ if __name__ == "__main__":
         "raw_ai_response": "{\"frontend\": {\"framework\": \"React\", \"state_management\": \"Zustand\", \"ui_components\": \"Material-UI\", \"routing\": \"React Router\", \"testing\": \"Jest + React Testing Library\", \"linting\": \"ESLint + Prettier\", \"build_tool\": \"Vite\", \"reasoning\": \"React provides a robust and widely adopted framework for building complex user interfaces. Zustand offers a lightweight and performant state management solution, suitable for the project's scope. Material-UI provides a rich set of pre-built components, accelerating development and ensuring consistency. React Router handles navigation efficiently. Jest and React Testing Library offer comprehensive testing capabilities. ESLint and Prettier ensure code quality and maintainability. Vite is a fast build tool improving developer experience.\"}, \"backend\": {\"language\": \"Node.js\", \"framework\": \"Express.js\", \"database\": \"PostgreSQL\", \"orm\": \"TypeORM\", \"caching\": \"Redis\", \"authentication\": \"JWT\", \"testing\": \"Jest + Supertest\", \"monitoring\": \"Prometheus + Grafana\", \"reasoning\": \"Node.js with Express.js provides a flexible and scalable backend solution. PostgreSQL is a robust, open-source relational database that handles complex data structures well. TypeORM provides an Object-Relational Mapper (ORM) for easier database interactions. Redis is used for caching frequently accessed data to improve performance. JWT is a secure and widely adopted authentication standard. Jest and Supertest enable comprehensive testing of backend functionalities. Prometheus and Grafana provide comprehensive monitoring and alerting.\"}}"
     }
 
-    # --- INPUT 4: Specific Feature Prompt ---
+    # --- INPUT 5: Specific Feature Prompt ---
     specific_feature_prompt = """
-        Your task is to implement a **login and signup functionality** for a full-stack application.
-        **Crucially, the backend should use IN-MEMORY storage only; DO NOT implement any database models, database connections, or persistence logic.**
+    Generate the complete full-stack application as described by the provided BRD Analysis. Implement ALL themes, epics, and user stories, including their associated tasks and acceptance criteria.
 
-        You have access to the existing boilerplate code as provided in the context below. You MUST modify existing boilerplate files (like main entry points) and create new files as needed.
+    **CRITICAL INSTRUCTION: ALL BACKEND DATA STORAGE MUST BE IN-MEMORY.**
+    * **DO NOT** generate any database models, schema definitions, database connection code, ORM configurations (e.g., TypeORM entities, migrations), or database-specific queries.
+    * For any data that would typically be stored in a database (users, jobs, candidates, chat messages, dashboard metrics), you **MUST** implement it using simple **in-memory data structures** (e.g., JavaScript Arrays or Maps within your backend controllers or a dedicated in-memory store module).
+    * Mock persistence: Assume data is lost when the server restarts.
 
-        === FRONTEND (React + Vite + TS) ===
-        Your goal is to provide the user interface for login and signup, and integrate it with the backend API endpoints.
+        **APPLICATION SCOPE: Implement ALL the following Themes and their nested Epics and User Stories from the BRD Analysis:**
 
-        Files to generate/modify:
+        --- BRD Features to Implement (Directly from brd_analysis_json) ---
 
-        1.  **Login Page:**
-            * Path: `src/pages/auth/LoginPage.tsx`
-            * Requirements:
-                * React functional component.
-                * Email and Password input fields.
-                * A "Login" button.
-                * Basic client-side form validation (e.g., email format, password length).
-                * A submit handler that calls the backend `/api/auth/login` endpoint using `src/services/authService.ts`.
-                * Handle successful login (e.g., store a mock JWT token in memory/localStorage, redirect to a dashboard/home page).
-                * Handle basic error display (e.g., "Invalid credentials").
-                * "Remember me" checkbox.
-                * "Forgot password" link (can be a placeholder).
-                * Link to Signup page.
+        {json.dumps(brd_analysis_json, indent=2)}
 
-        2.  **Signup Page:**
-            * Path: `src/pages/auth/SignupPage.tsx`
-            * Requirements:
-                * React functional component.
-                * Fields: Name, Email, Password, Confirm Password.
-                * Role selection (e.g., a simple dropdown or radio buttons for "Dealership" / "Agency").
-                * Basic client-side form validation (e.g., email format, password match).
-                * A submit handler that calls the backend `/api/auth/signup` endpoint using `src/services/authService.ts`.
-                * Handle successful signup (e.g., redirect to login page or show success message).
-                * Handle basic error display (e.g., "Email already registered").
-                * Link back to Login page.
+        --- End BRD Features ---
 
-        3.  **Auth Service:**
-            * Path: `src/services/authService.ts`
-            * Requirements:
-                * Provides functions for `login(email, password)` and `signup(name, email, password, role)`.
-                * Uses `fetch` or `axios` (if you manually add it to package.json) for API calls.
-                * Handles mock JWT token storage (e.g., `localStorage.setItem('token', 'mock_jwt_token')`).
-                * Basic error handling for API responses.
+        **Detailed Implementation Requirements:**
 
-        4.  **Application Routing:**
-            * Modify `src/App.tsx` to set up basic routing using `react-router-dom`.
-            * Include routes for `/login` (mapping to `LoginPage`), `/signup` (mapping to `SignupPage`), and a default `/` route (e.g., a simple placeholder or redirect to login).
-            * **Do NOT add Protected Routes yet.** Just basic routing.
+        1.  **User Management Theme (including Registration and Authentication Epic):**
+            * Implement **Login and Signup pages** on the frontend, adhering to the design principles from `default_design_prompt` (including the specific design elements for the Signup Page: logo, social login buttons, dynamic info slider, CTA box).
+            * Frontend should handle user input, validation, and API calls via `src/services/authService.ts`.
+            * Backend must provide `POST /api/auth/signup` and `POST /api/auth/login` endpoints.
+            * Backend `authController.ts` will manage user data in an **in-memory array/map**.
+            * For dealership registration (US-001), include a field for "Mahindra Dealership Code." Implement its basic validation in-memory (e.g., check if it's a non-empty string for now).
+            * For agency registration (US-002), include a mechanism for "request approval" (frontend shows a message like "Waiting for admin approval"; backend marks agency status as 'pending' in-memory).
+            * For Super Admin approval (US-003): Create a basic admin UI (e.g., a simple table on a `/admin/agency-approvals` route) where Super Admins can 'approve' or 'reject' pending agency registrations. This should update the in-memory agency status.
+            * Authentication should use *mock* JWT tokens as described in the system prompt.
+            * Implement user roles: Super Admin, Dealership HR, Recruitment Agency. Store these roles in-memory with user data.
 
-        === BACKEND (Node.js + Express + TS) ===
-        Your goal is to provide the API endpoints for login and signup. **All user data MUST be stored and managed IN-MEMORY only. NO DATABASE INTERACTION.**
+        2.  **Job Posting and Candidate Management Theme:**
+            * **Job Posting Epic (US-004):**
+                * Frontend UI for Dealership HR to post jobs (e.g., `/jobs/post`).
+                * Backend API for job creation (e.g., `POST /api/jobs`).
+                * Implement **in-memory job storage** (array/map).
+                * For "auto-filled details from a master list," create a simple **in-memory mock master list of job titles/details** (e.g., an array of objects) on the backend and provide an endpoint for the frontend to fetch it (e.g., `GET /api/job-master-data`).
+            * **Candidate Management Epic:**
+                * **Candidate Upload (US-005):**
+                    * Frontend UI for Recruitment Agencies to upload candidate data (e.g., `/candidates/upload`).
+                    * Implement mock CSV file upload on the frontend (e.g., a text area where CSV data can be pasted, or a simulated file input).
+                    * Backend API for processing candidate CSV data (e.g., `POST /api/candidates/upload`).
+                    * Implement **in-memory candidate storage** (array/map).
+                    * Implement simple in-memory duplicate profile detection based on email/phone number. Generate a mock report.
+                * **Candidate Sharing (US-006):**
+                    * Frontend UI for Agencies to view their candidates and select/share with dealerships for specific job postings (e.g., `/candidates/manage`).
+                    * Backend API for sharing candidates (e.g., `POST /api/candidates/share`).
+                    * Implement **in-memory storage for shared candidates** (e.g., linking a candidate ID to a job ID in an in-memory map).
+                    * The "matching percentage" can be a simple placeholder calculation (e.g., random number or based on a keyword match in-memory).
 
-        Files to generate/modify:
+        3.  **Communication and Collaboration Theme:**
+            * **Chat Functionality Epic (US-007):**
+                * Implement a basic chat interface on the frontend (e.g., `/chat` or integrated into candidate view).
+                * Backend API for sending/receiving chat messages (e.g., `POST /api/chat/message`, `GET /api/chat/history`).
+                * Implement **in-memory chat history storage** (e.g., an array of message objects).
+                * No real-time WebSocket for now; use simple polling (e.g., frontend fetches new messages every few seconds).
+                * Implement basic mock notifications (e.g., console log or simple UI message).
 
-        1.  **Auth Routes:**
-            * Path: `src/routes/authRoutes.ts`
-            * Endpoints:
-                * `POST /api/auth/login`: Handles user login. Calls `authController.login`.
-                * `POST /api/auth/signup`: Handles user registration. Calls `authController.signup`.
-            * No JWT authentication middleware needed at the route level for this in-memory mock.
+        4.  **Reporting and Dashboards Theme:**
+            * **Dashboard Implementation Epic (US-008, US-009, US-010):**
+                * Develop basic dashboard UIs for Super Admin, Dealership HR, and Recruitment Agency roles. Each role will have its own dashboard route (e.g., `/dashboard/admin`, `/dashboard/dealership`, `/dashboard/agency`).
+                * These dashboards should display placeholder data or aggregated counts from the **in-memory stores** (users, jobs, candidates, chat messages).
+                * Focus on basic layout and display of key metrics. No complex charting libraries or customization logic beyond basic display is needed for this initial generation.
 
-        2.  **Auth Controller:**
-            * Path: `src/controllers/authController.ts`
-            * Requirements:
-                * **Implement IN-MEMORY user storage:** Maintain a simple `Array` or `Map` to store mock user objects (e.g., `{ id, name, email, password_hash, role }`). For simplicity, you can mock password hashing with a simple string concatenation or a placeholder.
-                * **`signup(req, res)` method:**
-                    * Accepts `name`, `email`, `password`, `role`.
-                    * Perform basic input validation.
-                    * Check if email already exists in in-memory storage. If so, return 409 Conflict.
-                    * If new, add user to in-memory storage. Generate a simple `id`.
-                    * Return 201 Created with a success message.
-                * **`login(req, res)` method:**
-                    * Accepts `email`, `password`.
-                    * Find user by email in in-memory storage.
-                    * If user not found or password doesn't match (mock password check), return 401 Unauthorized.
-                    * If successful, return 200 OK with a mock JWT token (e.g., `{ token: "mock_jwt_token_for_" + user.email }`).
-                * No actual password hashing or JWT generation needed for this in-memory mock.
+        **General Implementation Notes (Re-emphasis from System Prompt):**
 
-        3.  **Backend Server Entry Point:**
-            * Modify `src/index.ts` to import and use the `authRoutes.ts`. Mount it at `/api/auth`.
+        * **Modular Code:** Break down components, controllers, and services into logical, small, and reusable files.
+        * **Error Handling:** Include basic error handling on both frontend (displaying messages) and backend (returning appropriate HTTP status codes).
+        * **Routing:** Ensure `react-router-dom` is fully utilized for navigation, and Express routes are correctly registered.
+        * **Security (Mock):** For authentication, generate *mock* JWT tokens. For authorization, implement simple in-memory checks based on the user's `role` (e.g., `if (user.role !== 'admin') return res.status(403)`).
+        * **NO EXTERNAL LIBRARIES for DB/Auth unless mock:** Do not use `bcrypt` or `jsonwebtoken` if they require npm install and are not part of basic Node.js. Implement basic string transformations for mock hashing/tokens.
 
-        === IMPORTANT INSTRUCTIONS ===
-        1.  **FOCUS ON IN-MEMORY BACKEND:** Absolutely no database-related code (no TypeORM, no database connections, no `src/entities/User.ts` or similar). All user data handling is strictly in-memory.
-        2.  **Generate ONLY new or modified files** based on the requirements above. If you modify an existing boilerplate file, output its *full and complete new content*.
-        3.  Ensure the frontend and backend are designed to **interact with each other** using the specified API endpoints.
-        4.  The final generated project should require only `npm install` (in both `frontend` and `backend` directories) and `npm run dev` (in each directory) to run.
-        5.  **For Frontend:** Use React functional components with hooks.
-        6.  **For Backend:** Use Express.js, TypeScript, async/await with basic error handling.
-
-        Output format (STRICT JSON, follow this structure EXACTLY):
-        ```json
-        {
-        "files": [
-            {
-            "file_path": "frontend/src/pages/auth/LoginPage.tsx",
-            "content": "/* Your generated React code for Login page */",
-            "overwrite": false
-            },
-            {
-            "file_path": "frontend/src/pages/auth/SignupPage.tsx",
-            "content": "/* Your generated React code for Signup page */",
-            "overwrite": false
-            },
-            {
-            "file_path": "frontend/src/services/authService.ts",
-            "content": "/* Your generated Auth Service code */",
-            "overwrite": false
-            },
-            {
-            "file_path": "frontend/src/App.tsx",
-            "content": "/* FULL content of App.tsx with routing changes */",
-            "overwrite": true
-            },
-            {
-            "file_path": "backend/src/routes/authRoutes.ts",
-            "content": "/* Your generated Auth Routes code */",
-            "overwrite": false
-            },
-            {
-            "file_path": "backend/src/controllers/authController.ts",
-            "content": "/* Your generated Auth Controller code */",
-            "overwrite": false
-            },
-            {
-            "file_path": "backend/src/index.ts",
-            "content": "/* FULL content of backend index.ts with authRoutes import/use */",
-            "overwrite": true
-            }
-        ]
-        """.strip()
+        --- End of `specific_feature_prompt` ---
+    """.strip()
 
     # 1. Copy boilerplates first
     project_paths = orchestrate_code_generation(
