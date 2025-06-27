@@ -183,7 +183,7 @@ def determine_boilerplates(tech_stack_json: dict) -> dict:
     
     logger.info(f"Detected frontend tech stack: {frontend}")
     
-    if frontend_framework == "React" and frontend_build_tool == "Vite":
+    if frontend_framework == "React.js" and frontend_build_tool == "Vite":
         required_boilerplates['frontend'] = "react_vite_ts"
     elif frontend_framework == "Next.js" and frontend_build_tool == "Vite":
         required_boilerplates['frontend'] = "next_tailwind"
@@ -498,6 +498,18 @@ if __name__ == "__main__":
             * **Middleware:** Functions executing before or after controller logic (e.g., authentication, validation). Located in `backend/src/middleware/`.
             * **Services/Utils:** Helper functions or modules for common tasks. Located in `backend/src/utils/` or `backend/src/services/`.
             * **Server Entry Point:** Main server setup and route registration occurs in `backend/src/index.ts`.
+            
+            * **TypeScript Type Safety (CRITICAL):**
+                * For any in-memory data structures or complex objects (e.g., users, products, etc.), **YOU MUST define and use explicit TypeScript interfaces or types.**
+                * Place these interfaces in a dedicated `src/types` directory (e.g., `src/types/user.ts`).
+                * Ensure all functions, arrays, and variables that handle these objects are properly typed. For example, `inMemoryUsers` should be typed as `User[]`, and function parameters like `user` in array methods (`.filter`, `.find`, `.push`) should also be explicitly typed (e.g., `(user: User) => ...`).
+                * Strictly adhere to the properties defined in the requirements (e.g., `id`, `fullName`, `username`, `email`, `password`, `role`, `status`, `dealershipCode`). Define enums or literal types for restricted values (e.g., `'Agency' | 'Dealership HR' | 'Super Admin'` for `role`, `'pending' | 'approved' | 'rejected'` for `status`).
+
+            * **CORS Configuration:**
+                * **YOU MUST configure CORS (Cross-Origin Resource Sharing) for the Express.js application.**
+                * Use the `cors` middleware.
+                * For development, allow requests from `http://localhost:5000` (Vite's default port) or `*` for maximum flexibility during development.
+                * Ensure `cors` is initialized early in `src/index.ts` before other routes.
 
         === COMMON FILE TYPES & LOCATIONS (Reference for Inference) ===
 
@@ -547,9 +559,25 @@ if __name__ == "__main__":
             * Always provide the **full, updated content** for modifications to configuration or entry point files like:
                 * `frontend/src/App.tsx` (for new routes, global contexts).
                 * `backend/src/index.ts` (for registering new route modules, global middleware).
-                * `package.json` (for new npm dependencies).
                 * Frontend config files (`postcss.config.js`, `tailwind.config.js`, `vite.config.js`) if changes are needed.
             * If a feature extends existing functionality (e.g., adding a new function to `authService.ts`), provide the **full, updated content** of that existing file.
+            * **IMPORTANT EXCEPTION: For `package.json` (both frontend and backend), DO NOT generate its full content. Instead, if a new `npm` dependency is required for the features you are generating, include a special comment block at the end of the JSON output like this, listing only the NEW dependencies:**
+                ```json
+                {
+                "files": [
+                    // ... other generated files ...
+                ],
+                "new_npm_dependencies": {
+                    "dependencies": {
+                    "library-name": "^1.0.0"
+                    },
+                    "devDependencies": {
+                    "@types/library-name": "^1.0.0"
+                    }
+                }
+                }
+                ```
+        **Only list dependencies that are genuinely *new* and *required* for the specific feature you are implementing in this turn.**
 
         3.  **Code Quality & Modularity:**
             * Adhere to best practices: clean, readable, and maintainable code.
@@ -563,9 +591,8 @@ if __name__ == "__main__":
         5.  **Output Format (STRICT JSON):**
             * Your response must be a **single, comprehensive JSON object** containing an array of file objects. Each file object represents a new file to be created or an existing file to be overwritten.
             * Each file object must have:
-                * `file_path` (string): The path to the file, relative to the project root (`frontend/` or `backend/`).
+                * `file_path` (string): The **full path to the file, ALWAYS prefixed with its project root (`frontend/` or `backend/`)**. For example: `backend/package.json`, `frontend/src/App.tsx`. **The key for the file path MUST be 'file_path', NOT 'relativePath'.**
                 * `content` (string): The **full and complete content** of the file. **Do not use placeholders.**
-                * `overwrite` (boolean): Set to `true` if the file's content should entirely replace any existing file at that path.
 
         Your response MUST adhere to the following JSON structure EXACTLY:
         ```json
@@ -621,7 +648,7 @@ if __name__ == "__main__":
         By adhering to these principles, the generated code will consistently reflect the high-quality, beautiful design standard required.
         """.strip()
 
-
+        #SUPER IMPORTANT WHEN INTEGRATING .py FILE TO MAIN DJANGO APP
         #Things to add in the default_design_prompt later on in App (regarding BRD)
         # --- UI Design Prioritization & Fallback ---
         # IMPORTANT:
@@ -850,28 +877,25 @@ if __name__ == "__main__":
         "status": "success",
         "tech_stack": {
             "frontend": {
-                "framework": "React",
-                "state_management": "Zustand",
-                "ui_components": "Material-UI",
+                "framework": "React.js",
+                "language": "JavaScript/TypeScript",
                 "routing": "React Router",
-                "testing": "Jest + React Testing Library",
-                "linting": "ESLint + Prettier",
-                "build_tool": "Vite",
-                "reasoning": "React provides a robust and widely adopted framework for building complex user interfaces. Zustand offers a lightweight and performant state management solution, suitable for the project's scope. Material-UI provides a rich set of pre-built components, accelerating development and ensuring consistency. React Router handles navigation efficiently. Jest and React Testing Library offer comprehensive testing capabilities. ESLint and Prettier ensure code quality and maintainability. Vite is a fast build tool improving developer experience."
+                "build_tool": "Vite"
             },
             "backend": {
                 "language": "Node.js",
                 "framework": "Express.js",
-                "database": "PostgreSQL",
-                "orm": "TypeORM", # Note: AI used Sequelize in actual code, TypeORM was requested.
-                "caching": "Redis",
-                "authentication": "JWT",
-                "testing": "Jest + Supertest",
-                "monitoring": "Prometheus + Grafana",
-                "reasoning": "Node.js with Express.js provides a flexible and scalable backend solution. PostgreSQL is a robust, open-source relational database that handles complex data structures well. TypeORM provides an Object-Relational Mapper (ORM) for easier database interactions. Redis is used for caching frequently accessed data to improve performance. JWT is a secure and widely adopted authentication standard. Jest and Supertest enable comprehensive testing of backend functionalities. Prometheus and Grafana provide comprehensive monitoring and alerting."
-            }
+                "database": "MongoDB"
+            },
+            "integrations": {
+                "csv_upload": "Bulk uploads of candidate data by agencies",
+                "common_master_data": "Predefined job descriptions, skills, and qualifications",
+                "chat_functionality": "Integrated chat between dealership HRs and agencies post candidate selection",
+                "duplicate_prevention": "Check across the entire platform database for duplicates"
+            },
+            "reasoning": "The application will be built using the MERN stack (MongoDB, Express.js, React.js, Node.js) as specified in the technical requirements. Essential integrations for CSV uploads, common master data, chat, and duplicate prevention will be incorporated."
         },
-        "raw_ai_response": "{\"frontend\": {\"framework\": \"React\", \"state_management\": \"Zustand\", \"ui_components\": \"Material-UI\", \"routing\": \"React Router\", \"testing\": \"Jest + React Testing Library\", \"linting\": \"ESLint + Prettier\", \"build_tool\": \"Vite\", \"reasoning\": \"React provides a robust and widely adopted framework for building complex user interfaces. Zustand offers a lightweight and performant state management solution, suitable for the project's scope. Material-UI provides a rich set of pre-built components, accelerating development and ensuring consistency. React Router handles navigation efficiently. Jest and React Testing Library offer comprehensive testing capabilities. ESLint and Prettier ensure code quality and maintainability. Vite is a fast build tool improving developer experience.\"}, \"backend\": {\"language\": \"Node.js\", \"framework\": \"Express.js\", \"database\": \"PostgreSQL\", \"orm\": \"TypeORM\", \"caching\": \"Redis\", \"authentication\": \"JWT\", \"testing\": \"Jest + Supertest\", \"monitoring\": \"Prometheus + Grafana\", \"reasoning\": \"Node.js with Express.js provides a flexible and scalable backend solution. PostgreSQL is a robust, open-source relational database that handles complex data structures well. TypeORM provides an Object-Relational Mapper (ORM) for easier database interactions. Redis is used for caching frequently accessed data to improve performance. JWT is a secure and widely adopted authentication standard. Jest and Supertest enable comprehensive testing of backend functionalities. Prometheus and Grafana provide comprehensive monitoring and alerting.\"}}"
+        "raw_ai_response": "{\"frontend\": {\"framework\": \"React.js\", \"language\": \"JavaScript/TypeScript\", \"routing\": \"React Router\", \"build_tool\": \"Vite\"}, \"backend\": {\"language\": \"Node.js\", \"framework\": \"Express.js\", \"database\": \"MongoDB\"}, \"integrations\": {\"csv_upload\": \"Bulk uploads of candidate data by agencies\", \"common_master_data\": \"Predefined job descriptions, skills, and qualifications\", \"chat_functionality\": \"Integrated chat between dealership HRs and agencies post candidate selection\", \"duplicate_prevention\": \"Check across the entire platform database for duplicates\"}, \"reasoning\": \"The application will be built using the MERN stack (MongoDB, Express.js, React.js, Node.js) as specified in the technical requirements. Essential integrations for CSV uploads, common master data, chat, and duplicate prevention will be incorporated.\"}"
     }
 
     # --- INPUT 5: Specific Feature Prompt ---
@@ -897,6 +921,13 @@ if __name__ == "__main__":
             * Basic client-side validation for input fields.
             * On successful login, store a mock JWT token (in localStorage or a simple in-memory variable for demo).
             * Redirect to a placeholder dashboard/home page upon successful login, or to an admin dashboard if the user is a Super Admin.
+            * **Landing Page (`/dashboard` or `/home`):**
+            * Create a central landing page component that users are redirected to after successful login.
+            * This page **MUST** include:
+                * A prominent **navigation bar** at the top.
+                * A **profile dropdown** in the navigation bar (e.g., on the right side), including a placeholder profile picture icon. This dropdown should ideally show the logged-in user's name/email and have a "Logout" option.
+                * Two distinct main sections or cards on the primary content area: one for **"Job Posting"** and another for **"Candidate Management."** These can be simple placeholder sections for now.
+            * Ensure `react-router-dom` has a route configured for this landing page.
             * Display clear error messages for invalid credentials or other login failures.
         * **Signup Page (US-001, US-002 details combined):**
             * Allow users to input Full Name, Username, Email, Password, and Confirm Password.
@@ -921,7 +952,7 @@ if __name__ == "__main__":
         * **API Endpoints:**
             * Existing: `POST /api/auth/signup` and `POST /api/auth/login`.
             * New: `GET /api/admin/pending-agencies` (to fetch pending agency requests) and `POST /api/admin/approve-reject-agency` (to handle approval/rejection).
-        * **IN-MEMORY User Storage:** **All user data MUST be stored and managed exclusively IN-MEMORY.** Use a simple array or map (e.g., `inMemoryUsers = []`) to store mock user objects (e.g., `{ id, name, email, password_hash, role, status: 'pending' | 'approved' | 'rejected' }`).
+        * **IN-MEMORY User Storage:** All user data MUST be stored and managed exclusively IN-MEMORY. Use a simple array (e.g., `inMemoryUsers: User[] = []`) to store mock user objects. **You MUST define a `User` TypeScript interface (as per "TypeScript Type Safety" instruction below) that precisely reflects these properties:** `{ id: number; fullName: string; username: string; email: string; password: string; role: 'Agency' | 'Dealership HR' | 'Super Admin'; status: 'pending' | 'approved' | 'rejected'; dealershipCode?: string; }`. Ensure `password` holds the mock-hashed value.
             * **NO DATABASE INTERACTION, NO ORM, NO DATABASE MODELS, NO MIGRATIONS, NO DATABASE-SPECIFIC QUERIES.**
         * **Signup Logic:**
             * Accepts Full Name, Username, Email, Password, Role.
@@ -947,10 +978,6 @@ if __name__ == "__main__":
                 * Return 200 OK with a success message.
             * Implement a basic authorization check for these admin endpoints: only users with `role: 'Super Admin'` should be able to access them (mock check based on token data).
 
-        **UI Design and Aesthetics (AI should apply this from default_design_prompt):**
-        * The generated UI must be visually appealing, modern, and consistent with the design system provided in the `default_design_prompt`, including gradients, glass effects, rounded elements, and specified typography/colors.
-        * **Specifically for Signup Page:** Integrate the visual design elements provided previously: a logo, social login buttons (Google, GitHub, Facebook SVGs or icons), a dynamic information slider with navigation controls, and a prominent call-to-action (CTA) box, all styled using Tailwind CSS classes based on the `default_design_prompt`.
-        * **For Admin Approval Page:** Design a clean, modern table or list view for pending requests, with clearly visible Approve/Reject buttons, consistent with the overall design language.
     """.strip()
 
     # 1. Copy boilerplates first
