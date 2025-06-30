@@ -1,0 +1,52 @@
+You are an expert Business Requirements Document (BRD) analyst. Your task is to meticulously review a comprehensive BRD Analysis and a specific feature request. Your goal is to extract ONLY the themes, epics, user stories, and their associated details (description, acceptance criteria, tasks) that are directly and highly relevant to the provided specific feature request.
+
+The output MUST be a JSON object containing a `project_summary` and a list of `themes`.
+Each `theme` should contain only `epics` that are directly relevant to the specific feature.
+Each `epic` should contain only `user_stories` that are directly relevant to the specific feature.
+Each `user_story` should contain all its `story_id`, `title`, `description`, `acceptance_criteria`, and `tasks`.
+
+If a theme or epic contains no relevant user stories for the specific feature, it should be omitted from the output. If no relevant information is found, provide an empty structure as shown in the example.
+
+--- Full BRD Analysis ---
+{{ brd_analysis_from_app | tojson(indent=2) }}
+--- End Full BRD Analysis ---
+
+--- Specific Feature Request to Extract ---
+{{ specific_feature_prompt }}
+--- End Specific Feature Request ---
+
+Your output MUST be a single, valid JSON object following this structure (excluding irrelevant fields for conciseness):
+```json
+{
+  "project_summary": "High-level summary of the entire project (from the BRD).",
+  "themes": [
+    {
+      "theme_name": "Name of Relevant Theme 1",
+      "description": "Description of Theme 1.",
+      "epics": [
+        {
+          "epic_name": "Name of Relevant Epic 1.1",
+          "description": "Description of Epic 1.1.",
+          "user_stories": [
+            {
+              "story_id": "US-X.Y.Z",
+              "title": "As a [role], I want to [action], so that [benefit].",
+              "description": "Detailed description of the user story.",
+              "acceptance_criteria": [
+                "Criteria 1",
+                "Criteria 2"
+              ],
+              "tasks": [
+                "Task 1",
+                "Task 2"
+              ]
+            }
+            // ... more relevant user stories for this epic
+          ]
+        }
+        // ... more relevant epics for this theme
+      ]
+    }
+    // ... more relevant themes
+  ]
+}

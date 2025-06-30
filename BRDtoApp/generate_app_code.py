@@ -14,7 +14,7 @@ from jinja2 import Environment, FileSystemLoader
 # Define the base directory for your boilerplate templates
 # Using absolute path to ensure correct location
 BOILERPLATE_TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "boilerplate_templates")
-PROMPT_TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "prompts")
+PROMPT_TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompts")
 
 # --- Configure Logging ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -222,6 +222,53 @@ def determine_boilerplates(tech_stack_json: dict) -> dict:
     logger.info(f"Required boilerplates: {required_boilerplates}")
     return required_boilerplates
 
+#extract_relevant_brd_features
+def extract_relevant_brd_features(
+    full_brd_analysis_json: dict,
+    specific_feature_request_text: str
+    ) -> dict:
+    """
+    Calls an AI to extract BRD themes, epics, and user stories relevant to a specific feature.
+
+    Args:
+        full_brd_analysis_json (dict): The complete, parsed BRD analysis dictionary.
+        specific_feature_request_text (str): The specific feature prompt text (e.g., login/signup).
+
+    Returns:
+        dict: A subset of the BRD analysis (themes, epics, user stories) relevant to the feature,
+              or an empty dictionary if extraction fails.
+    """
+    logger.info(f"Extracting relevant BRD features for: '{specific_feature_request_text[:80]}...'")
+
+    try:
+        # Load the dedicated BRD feature extractor prompt template
+        extractor_template = jinja_env.get_template("brd_feature_extractor_prompt.j2")
+
+        # Render the prompt with the full BRD and the specific feature request
+        extraction_prompt = extractor_template.render(
+            full_brd_analysis_json=full_brd_analysis_json,
+            specific_feature_request=specific_feature_request_text
+        )
+
+        # Assuming gemini_model is a global instance of genai.GenerativeModel
+        # (This is the first AI call in the multi-stage process)
+        api_response = gemini_model.generate_content(extraction_prompt)
+        ai_extracted_json_str = api_response.text
+
+        # Optional: Log token usage for this extraction call
+        if api_response.usage_metadata:
+            logger.info(f"BRD Extraction Call - Input Tokens: {api_response.usage_metadata.prompt_token_count}, Output Tokens: {api_response.usage_metadata.candidates_token_count}, Total Tokens: {api_response.usage_metadata.total_token_count}")
+
+        # Parse the JSON response from the extraction AI
+        extracted_brd_data = json.loads(ai_extracted_json_str)
+
+        logger.info("Successfully extracted relevant BRD features.")
+        return extracted_brd_data
+
+    except Exception as e:
+        logger.error(f"Error during BRD feature extraction AI call: {e}")
+        return {"project_summary": "Error during extraction, check logs.", "themes": []} # Return a default structure on error
+
 #High-level orchestration functions
 #orchestrate_code_generation
 def orchestrate_code_generation(brd_analysis_json: dict, tech_stack_json: dict, project_output_dir: str):
@@ -268,7 +315,7 @@ def orchestrate_code_generation(brd_analysis_json: dict, tech_stack_json: dict, 
         if frontend_boilerplate_name == "react_vite_ts":
                 frontend_context_files = [
                 'package.json',
-                'vite.config.js',
+                'vite.config.ts',
                 'index.html', # This is the root index.html
                 'src/main.tsx',
                 'src/App.tsx',
