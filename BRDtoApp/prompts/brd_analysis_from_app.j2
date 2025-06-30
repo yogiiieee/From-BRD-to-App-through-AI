@@ -1,0 +1,212 @@
+{
+        "project_summary": "Manage registration, authentication, and authorization for dealerships, agencies, and super admins. Enable dealerships to post jobs and agencies to manage and share candidate data. Facilitate communication and collaboration between dealerships and agencies. Provide dashboards for super admins, dealership HRs, and agencies to track key metrics.",
+        "themes": [
+            {
+                "theme_name": "User Management",
+                "description": "Manage registration, authentication, and authorization for dealerships, agencies, and super admins.",
+                "epics": [
+                    {
+                        "epic_name": "Registration and Authentication",
+                        "description": "Implement user registration, login, and authentication for different user roles.",
+                        "user_stories": [
+                            {
+                                "story_id": "US-001",
+                                "title": "As a dealership HR manager, I want to register on the platform using my Mahindra Dealership Code, so that I can post jobs.",
+                                "acceptance_criteria": [
+                                    "The system should accept valid Mahindra Dealership Codes.",
+                                    "A unique account is created for each dealership.",
+                                    "An email confirmation is sent upon successful registration."
+                                ],
+                                "tasks": [
+                                    "Create user registration API endpoint",
+                                    "Develop frontend registration form for dealerships",
+                                    "Implement Mahindra Dealership Code verification",
+                                    "Create 'Dealership' model in the database",
+                                    "Send email confirmation upon successful registration"
+                                ]
+                            },
+                            {
+                                "story_id": "US-002",
+                                "title": "As a recruitment agency, I want to register on the platform and request approval, so that I can access and utilize the platform's features.",
+                                "acceptance_criteria": [
+                                    "The system allows agencies to submit a registration request.",
+                                    "The Super Admin receives notification of new registration requests.",
+                                    "Agencies receive a notification upon approval or rejection."
+                                ],
+                                "tasks": [
+                                    "Create user registration API endpoint for agencies",
+                                    "Develop frontend registration form for agencies",
+                                    "Implement admin approval workflow",
+                                    "Create 'Agency' model in the database",
+                                    "Send notifications (email and in-app) upon approval/rejection"
+                                ]
+                            },
+                            {
+                                "story_id": "US-003",
+                                "title": "As a super admin, I want to approve or reject agency registration requests, so that I can control access to the platform.",
+                                "acceptance_criteria": [
+                                    "The Super Admin has a dashboard to review pending requests.",
+                                    "The system allows the Super Admin to approve or reject requests.",
+                                    "Approved agencies receive platform access; rejected agencies receive a notification."
+                                ],
+                                "tasks": [
+                                    "Develop admin dashboard for managing agency registrations",
+                                    "Implement approval/rejection functionality",
+                                    "Send notifications to agencies upon approval/rejection",
+                                    "Manage user roles and permissions"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "theme_name": "Job Posting and Candidate Management",
+                "description": "Enable dealerships to post jobs and agencies to manage and share candidate data.",
+                "epics": [
+                    {
+                        "epic_name": "Job Posting",
+                        "description": "Implement functionality for dealerships to post jobs with auto-filled details from a master list.",
+                        "user_stories": [
+                            {
+                                "story_id": "US-004",
+                                "title": "As a dealership HR manager, I want to post a job opening and have job details auto-filled from a master list, so that I can save time.",
+                                "acceptance_criteria": [
+                                    "The system displays a list of predefined job titles.",
+                                    "Selecting a job title auto-populates relevant fields.",
+                                    "Dealership HR can modify auto-populated fields if needed.",
+                                    "Jobs are only posted by verified dealerships."
+                                ],
+                                "tasks": [
+                                    "Create job posting API endpoint",
+                                    "Develop frontend job posting form with auto-fill functionality",
+                                    "Create 'Job' model in the database",
+                                    "Implement master data integration for job details",
+                                    "Implement Mahindra Dealership Code verification for job posting"
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "epic_name": "Candidate Management",
+                        "description": "Allow agencies to upload candidate data, manage candidate profiles, and share candidates with dealerships.",
+                        "user_stories": [
+                            {
+                                "story_id": "US-005",
+                                "title": "As a recruitment agency, I want to upload candidate data via CSV, so that I can efficiently manage a large number of candidates.",
+                                "acceptance_criteria": [
+                                    "The system supports CSV file uploads.",
+                                    "The system checks for duplicate profiles based on email and phone number.",
+                                    "A report is generated indicating unique and duplicate profiles.",
+                                    "Unique profiles are added to the agency's candidate pool."
+                                ],
+                                "tasks": [
+                                    "Implement CSV file upload functionality",
+                                    "Develop duplicate profile detection algorithm",
+                                    "Create 'Candidate' model in the database",
+                                    "Generate import report for agencies",
+                                    "Implement frontend for CSV upload and report viewing"
+                                ]
+                            },
+                            {
+                                "story_id": "US-006",
+                                "title": "As a recruitment agency, I want to share candidates with dealerships for specific job postings, so that I can recommend suitable candidates.",
+                                "acceptance_criteria": [
+                                    "Agencies can select candidates from their pool or upload new ones.",
+                                    "Dealerships can view candidate profiles (without contact details).",
+                                    "A matching percentage indicates candidate suitability.",
+                                    "Duplicate candidate profiles are prevented from being shared."
+                                ],
+                                "tasks": [
+                                    "Implement candidate sharing functionality",
+                                    "Develop candidate matching algorithm",
+                                    "Create UI to display candidate profiles (excluding contact details)",
+                                    "Implement duplicate candidate check before sharing"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "theme_name": "Communication and Collaboration",
+                "description": "Facilitate communication and collaboration between dealerships and agencies.",
+                "epics": [
+                    {
+                        "epic_name": "Chat Functionality",
+                        "description": "Implement a chat feature for communication between dealerships and agencies after candidate selection.",
+                        "user_stories": [
+                            {
+                                "story_id": "US-007",
+                                "title": "As a dealership HR manager, I want to chat with agencies after a candidate is selected, so that I can coordinate interviews and share information.",
+                                "acceptance_criteria": [
+                                    "A chat interface is available post-candidate selection.",
+                                    "Chat history is preserved.",
+                                    "Notifications for new messages are sent."
+                                ],
+                                "tasks": [
+                                    "Implement real-time chat functionality",
+                                    "Integrate chat into candidate profile views",
+                                    "Implement notification system for new messages",
+                                    "Store chat history in the database"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "theme_name": "Reporting and Dashboards",
+                "description": "Provide dashboards for super admins, dealership HRs, and agencies to track key metrics.",
+                "epics": [
+                    {
+                        "epic_name": "Dashboard Implementation",
+                        "description": "Develop dashboards for different user roles to visualize key performance indicators.",
+                        "user_stories": [
+                            {
+                                "story_id": "US-008",
+                                "title": "As a super admin, I want a customizable dashboard to view key platform metrics, so that I can monitor platform performance and make informed decisions.",
+                                "acceptance_criteria": [
+                                    "The dashboard displays key metrics (e.g., top jobs, top dealerships, top agencies).",
+                                    "The dashboard is customizable.",
+                                    "Data is displayed in clear and concise visualizations."
+                                ],
+                                "tasks": [
+                                    "Develop super admin dashboard UI",
+                                    "Implement data aggregation and visualization",
+                                    "Implement dashboard customization options",
+                                    "Connect dashboard to database for real-time data"
+                                ]
+                            },
+                            {
+                                "story_id": "US-009",
+                                "title": "As a dealership HR manager, I want a dashboard to track job postings, candidate applications, and interview schedules, so that I can effectively manage the recruitment process.",
+                                "acceptance_criteria": [
+                                    "The dashboard displays key metrics relevant to dealership HRs (e.g., top jobs, resumes received, candidates selected).",
+                                    "Data is displayed in clear and concise visualizations."
+                                ],
+                                "tasks": [
+                                    "Develop dealership HR dashboard UI",
+                                    "Implement data aggregation and visualization for dealership HRs",
+                                    "Connect dashboard to database for real-time data"
+                                ]
+                            },
+                            {
+                                "story_id": "US-010",
+                                "title": "As a recruitment agency, I want a dashboard to track candidate profiles, job applications, and candidate status, so that I can effectively manage my candidate pool and track performance.",
+                                "acceptance_criteria": [
+                                    "The dashboard displays key metrics relevant to agencies (e.g., candidate profiles shared, candidate status, top positions closed).",
+                                    "Data is displayed in clear and concise visualizations."
+                                ],
+                                "tasks": [
+                                    "Develop agency dashboard UI",
+                                    "Implement data aggregation and visualization for agencies",
+                                    "Connect dashboard to database for real-time data"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
