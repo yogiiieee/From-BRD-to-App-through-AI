@@ -1,29 +1,46 @@
 You are tasked with generating UI code that is not just functional, but visually striking, modern, and user-friendly. Adhere to the following design system and aesthetic principles for all frontend components:
+For all the designs i ask you to make 
+--- UI Design Prioritization & Fallback ---
+**IMPORTANT:**
+1.  **Prioritize UI/UX details provided explicitly within the Business Requirements Document (BRD) Analysis.** If the BRD contains specific requirements for colors, layouts, or component styles, **these take precedence**.
+2.  **If the BRD's UI/UX details are absent, generic, or insufficient, then fully implement the detailed design system described below.** This serves as the default, high-quality aesthetic to ensure a beautiful and consistent user interface.
+3.  **Regardless of BRD specifics, always adhere to the best practices and styling framework guidelines provided below** (e.g., use of Tailwind CSS, responsive layouts, clean React structure). These are non-negotiable for production-ready code.
+--- End UI Design Prioritization ---
 
-        **1. General UI Aesthetic & Theme:**
-        * **Overall Vibe:** Embrace a modern, sophisticated, and vibrant aesthetic. Think "glassmorphism" with subtle gradients and transparent elements.
-        * **Primary Palette (Background):** Utilize dynamic gradients as the main page background. A common example is `linear-gradient(135deg, #8B5CF6 0%, #EC4899 50%, #F97316 100%)`.
-        * **Secondary Palette (Elements):** UI containers and panels should often use dark, semi-transparent backgrounds with blur effects, creating a "glass-effect." E.g., `rgba(255, 255, 255, 0.1)` or `rgba(0, 0, 0, 0.4)` with `backdrop-filter: blur(10px)` and subtle white borders (`1px solid rgba(255, 255, 255, 0.2)`).
-        * **Text Color:** Predominantly white or light text colors (`text-white`, `text-white/80`, `text-white/90`) on dark/transparent backgrounds, contrasting with darker text (`text-gray-800`, `text-gray-600`) on light/white transparent backgrounds.
-        * **Typography:** Use the 'Inter' font for all text. Assume it's available or linked (e.g., via Google Fonts). Prioritize clear hierarchy with bold headings (`font-bold`, `text-3xl`, `text-4xl`).
+**1. General UI Aesthetic & Theme:**
+* **Overall Vibe:** Embrace a modern, sophisticated, and vibrant aesthetic. Think "glassmorphism" with subtle gradients and transparent elements.
+* **Primary Palette (Background):** Utilize dynamic gradients as the main page background. A common example is `linear-gradient(135deg, #8B5CF6 0%, #EC4899 50%, #F97316 100%)`.
+* **Secondary Palette (Elements):** UI containers and panels should often use dark, semi-transparent backgrounds with blur effects, creating a "glass-effect." E.g., `rgba(255, 255, 255, 0.1)` or `rgba(0, 0, 0, 0.4)` with `backdrop-filter: blur(10px)` and subtle white borders (`1px solid rgba(255, 255, 255, 0.2)`).
+* **Text Color:** Predominantly white or light text colors (`text-white`, `text-white/80`, `text-white/90`) on dark/transparent backgrounds, contrasting with darker text (`text-gray-800`, `text-gray-600`) on light/white transparent backgrounds.
+* **Typography:** Use the 'Inter' font for all text. Assume it's available or linked (e.g., via Google Fonts). Prioritize clear hierarchy with bold headings (`font-bold`, `text-3xl`, `text-4xl`).
 
-        **2. Styling Framework:**
-        * **Always use Tailwind CSS** for all styling. Leverage Tailwind's utility classes extensively. Minimize custom CSS unless absolutely necessary for unique effects not achievable with Tailwind.
+**2. Styling Framework & Icons:**
+* **Always use Tailwind CSS** for all styling. Leverage Tailwind's utility classes extensively. Minimize custom CSS unless absolutely necessary for unique effects not achievable with Tailwind.
+* **Use icons from `lucide-react`** for all iconography and logos. Do not install other packages for UI themes, icons, etc., unless absolutely necessary or explicitly requested.
 
-        **3. Component Specific Styling Guidelines:**
-        * **Main Containers:** Large, rounded (e.g., `rounded-3xl`), with significant `shadow-2xl` and the `glass-effect` or similar transparent backgrounds.
-        * **Input Fields:**
-            * Labels: `block text-white/90 text-sm font-medium mb-2`.
-            * Inputs: `w-full px-4 py-4 bg-black/50 border border-white/20 rounded-2xl text-white placeholder-white/50 focus:outline-none focus:border-white/40 transition-all duration-300`.
-            * Error Messages: Small red text (e.g., `text-red-500 text-sm`).
-        * **Buttons (General):**
-            * Default primary action buttons should have a vibrant gradient background (e.g., `bg-gradient-to-r from-purple-600 to-pink-600`), white text, `font-semibold`, ample padding (`py-4`), and rounded corners (`rounded-2xl`). Include a subtle `hover:opacity-90` transition.
-            * Secondary/Icon Buttons: Often circular (`rounded-full`, `w-12 h-12`), with white or transparent colored backgrounds, and a `hover:scale-110` transition.
-        * **Avatars/Small UI Elements:** Use small, circular elements (`w-8 h-8 rounded-full`), often with border (`border-2 border-white`) and subtle background gradients for visual variety.
-        * **Layouts:** Prefer responsive flexbox or grid layouts (e.g., `flex flex-col lg:flex-row`).
+**3. Component Specific Styling Guidelines:**
+* **Page Layout (CRITICAL):**
+    * All pages (especially Landing Page and Dashboards) **MUST** have a well-defined structure:
+        * **Header/Navigation Bar:** Prominent, responsive, and includes core navigation elements (e.g., logo, main links, profile/user actions). It should be visually distinct and span the full width.
+        * **Main Content Area:** Should be well-structured, using `flex` or `grid` for responsive layouts. **AVOID single, centered blocks of text.** Content should fill the available space intelligently, using cards, sections, and appropriate spacing.
+        * **Footer (especially for Landing Page):** A clear, concise footer at the bottom of the page, containing copyright, basic links (e.g., privacy policy, contact), or company info.
+    * Ensure ample padding (`p-x`, `py-y`) and margin (`m-x`, `my-y`) to prevent elements from feeling cramped.
+    * Utilize responsive Tailwind prefixes (`sm:`, `md:`, `lg:`) for adaptive design across all screen sizes.
+* **Main Containers:** Large, rounded (e.g., `rounded-3xl`), with significant `shadow-2xl` and the `glass-effect` or similar transparent backgrounds.
+* **Input Fields:**
+    * Labels: `block text-white/90 text-sm font-medium mb-2`.
+    * Inputs: `w-full px-4 py-4 bg-black/50 border border-white/20 rounded-2xl text-white placeholder-white/50 focus:outline-none focus:border-white/40 transition-all duration-300`.
+    * Error Messages: Small red text (e.g., `text-red-500 text-sm`).
+* **Buttons (General):**
+    * Default primary action buttons should have a vibrant gradient background (e.g., `bg-gradient-to-r from-purple-600 to-pink-600`), white text, `font-semibold`, ample padding (`py-4`), and rounded corners (`rounded-2xl`). Include a subtle `hover:opacity-90` transition.
+    * Secondary/Icon Buttons: Often circular (`rounded-full`, `w-12 h-12`), with white or transparent colored backgrounds, and a `hover:scale-110` transition.
+* **Avatars/Small UI Elements:** Use small, circular elements (`w-8 h-8 rounded-full`), often with border (`border-2 border-white`) and subtle background gradients for visual variety.
+* **Layouts:** Prefer responsive flexbox or grid layouts (e.g., `flex flex-col lg:flex-row`).
 
-        **4. React Component Structure:**
-        * Organize components logically (`pages`, `components`, `services`).
-        * Ensure all necessary imports are present.
-        * Write clean, functional React components with proper state management (useState, useContext).
-        * When integrating with backend APIs, use the `frontend/src/services/` pattern.
+**4. React Component Structure:**
+* Organize components logically (`pages`, `components`, `services`).
+* Ensure all necessary imports are present.
+* Write clean, functional React components with proper state management (useState, useContext).
+* When integrating with backend APIs, use the `frontend/src/services/` pattern.
+
+By adhering to these principles, the generated code will consistently reflect the high-quality, beautiful design standard required.

@@ -226,7 +226,7 @@ def determine_boilerplates(tech_stack_json: dict) -> dict:
 def extract_relevant_brd_features(
     full_brd_analysis_json: dict,
     specific_feature_request_text: str
-    ) -> dict:
+    ):
     """
     Calls an AI to extract BRD themes, epics, and user stories relevant to a specific feature.
 
@@ -243,12 +243,24 @@ def extract_relevant_brd_features(
     try:
         # Load the dedicated BRD feature extractor prompt template
         extractor_template = jinja_env.get_template("brd_feature_extractor_prompt.j2")
+        logger.info(f"DEBUG: Type of full_brd_analysis_json being passed to Jinja: {type(full_brd_analysis_json)}")
+        #TEMPORARY DEBUG
+        if isinstance(full_brd_analysis_json, dict) or isinstance(full_brd_analysis_json, list):
+            logger.info(f"DEBUG: First 200 chars of full_brd_analysis_json: {str(full_brd_analysis_json)[:200]}...")
+        else:
+            logger.info(f"DEBUG: full_brd_analysis_json content (non-dict/list): {full_brd_analysis_json}")
 
         # Render the prompt with the full BRD and the specific feature request
-        extraction_prompt = extractor_template.render(
-            full_brd_analysis_json=full_brd_analysis_json,
-            specific_feature_request=specific_feature_request_text
-        )
+        try:
+            extraction_prompt = extractor_template.render(
+                full_brd_analysis_json=full_brd_analysis_json,
+                specific_feature_request=specific_feature_request_text
+            )
+        except Exception as render_error: # Catch any error during rendering
+            logger.error(f"DEBUG: Error during Jinja2 template rendering: {render_error}", exc_info=True)
+            # This is where the 'Object of type Undefined' error should surface more clearly
+            raise # Re-raise to propagate the error and stop execution
+
 
         # Assuming gemini_model is a global instance of genai.GenerativeModel
         # (This is the first AI call in the multi-stage process)
@@ -260,7 +272,34 @@ def extract_relevant_brd_features(
             logger.info(f"BRD Extraction Call - Input Tokens: {api_response.usage_metadata.prompt_token_count}, Output Tokens: {api_response.usage_metadata.candidates_token_count}, Total Tokens: {api_response.usage_metadata.total_token_count}")
 
         # Parse the JSON response from the extraction AI
-        extracted_brd_data = json.loads(ai_extracted_json_str)
+        extracted_brd_data = {} # Initialize in case of failure
+        try:
+            # Attempt to find and extract JSON within markdown code blocks
+            # This is a common pattern for LLMs
+            json_match = re.search(r'```json\n(.*?)```', ai_extracted_json_str, re.DOTALL)
+            if json_match:
+                pure_json_str = json_match.group(1).strip()
+                logger.info("DEBUG: Extracted JSON from markdown block.")
+            else:
+                # If no markdown block, assume the whole response *should* be JSON
+                pure_json_str = ai_extracted_json_str.strip()
+                logger.info("DEBUG: No markdown block found, attempting to parse raw response as JSON.")
+
+            extracted_brd_data = json.loads(pure_json_str)
+            logger.info("Successfully parsed AI extracted BRD data.")
+
+        except json.JSONDecodeError as json_err:
+            logger.error(f"Error parsing AI extracted BRD data as JSON: {json_err}")
+            logger.error(f"Raw AI Extractor Response (causing error):\n{ai_extracted_json_str}")
+            # You might want to return a specific error structure or re-raise
+            return {"project_summary": "Error parsing AI response.", "themes": []}
+        except Exception as general_err:
+            logger.error(f"Unexpected error during AI extracted BRD data processing: {general_err}")
+            logger.error(f"Raw AI Extractor Response (causing error):\n{ai_extracted_json_str}")
+            return {"project_summary": "Unexpected error.", "themes": []}
+
+        #TEMPORARY DEBUG
+        logger.info(f"DEBUG: Raw AI Extractor Response:\n{ai_extracted_json_str}")
 
         logger.info("Successfully extracted relevant BRD features.")
         return extracted_brd_data
@@ -271,7 +310,13 @@ def extract_relevant_brd_features(
 
 #High-level orchestration functions
 #orchestrate_code_generation
-def orchestrate_code_generation(brd_analysis_json: dict, tech_stack_json: dict, project_output_dir: str):
+def orchestrate_code_generation(brd_analysis_json: dict,
+    tech_stack_json: dict,
+    project_output_base_dir: str, 
+    system_prompt_content: str,       
+    default_design_prompt_content: str, 
+    specific_feature_prompt_content: str 
+    ):
     """
     Orchestrates code generation while maintaining the existing generated_code folder structure.
     Returns paths where boilerplates were copied.
@@ -280,149 +325,108 @@ def orchestrate_code_generation(brd_analysis_json: dict, tech_stack_json: dict, 
     # Determine which boilerplates are expected based on tech stack
     boilerplates_to_use = determine_boilerplates(tech_stack_json)
 
-    # Construct the actual paths where boilerplates *should* exist within project_output_dir
-    # This dictionary will store the actual paths where the AI should read/write
-    copied_paths = {}   
-    
+    logger.info(f"Identified required boilerplates: {boilerplates_to_use}")
+
+    # Define the full path to the project's root output directory (e.g., generated_code/WizRD)
+    # Using PROJECT_NAME from global constants (ensure PROJECT_NAME is defined globally)
+    current_project_root = os.path.join(project_output_base_dir, PROJECT_NAME)
+
+    # Dictionary to store the actual paths where boilerplates are copied
+    # This will be passed to save_generated_code
+    copied_output_dirs = {}
+
+    logger.info("Starting automated boilerplate copying...")
+
+    # --- Copy Frontend Boilerplate ---
     if 'frontend' in boilerplates_to_use:
-        actual_frontend_folder_name = boilerplates_to_use['frontend']
-        frontend_path_in_project = os.path.join(project_output_dir, "frontend")
-        if os.path.exists(frontend_path_in_project) and os.path.isdir(frontend_path_in_project):
-            copied_paths['frontend'] = frontend_path_in_project
-        else:
-            logger.warning(f"Frontend boilerplate directory not found or is not a directory at {frontend_path_in_project}. Skipping frontend generation.")
+        boilerplate_name = boilerplates_to_use['frontend'] # e.g., 'react_vite_ts'
+        source_path = os.path.join(BOILERPLATE_TEMPLATES_DIR, boilerplate_name) # BOILERPLATE_TEMPLATES_DIR must be global
+        destination_path = os.path.join(current_project_root, "frontend")
 
+        if os.path.exists(destination_path) and os.path.exists(os.path.join(destination_path, 'package.json')):
+            logger.info(f"Frontend boilerplate already exists at '{destination_path}'. Skipping copy.")
+            copied_output_dirs['frontend'] = destination_path # Still store the path
+        else:
+            logger.info(f"Copying frontend boilerplate from '{source_path}' to '{destination_path}'")
+            try:
+                # If it exists but is incomplete (e.g., no package.json), or we want a fresh copy, remove it.
+                if os.path.exists(destination_path):
+                    logger.warning(f"Existing frontend directory '{destination_path}' is incomplete or needs refresh. Removing before copy.")
+                    shutil.rmtree(destination_path)
+
+                os.makedirs(os.path.dirname(destination_path), exist_ok=True) # Ensure parent 'WizRD' exists
+                shutil.copytree(source_path, destination_path)
+                copied_output_dirs['frontend'] = destination_path # Store the actual path
+                logger.info("Frontend boilerplate copied successfully.")
+            except Exception as e:
+                logger.error(f"Failed to copy frontend boilerplate: {e}")
+                return {} # Indicate failure
+
+    # --- Copy Backend Boilerplate ---
     if 'backend' in boilerplates_to_use:
-        actual_backend_folder_name = boilerplates_to_use['backend']
-        backend_path_in_project = os.path.join(project_output_dir, "backend")
-        if os.path.exists(backend_path_in_project) and os.path.isdir(backend_path_in_project):
-            copied_paths['backend'] = backend_path_in_project
-        else:
-            logger.warning(f"Backend boilerplate directory not found or is not a directory at {backend_path_in_project}. Skipping backend generation.")
+        boilerplate_name = boilerplates_to_use['backend'] # e.g., 'node_js'
+        source_path = os.path.join(BOILERPLATE_TEMPLATES_DIR, boilerplate_name)
+        destination_path = os.path.join(current_project_root, "backend")
 
-    if not copied_paths:
-        logger.error(f"No boilerplate directories found in {project_output_dir} as expected based on tech stack. Cannot proceed with AI generation.")
-        print(f"Error: No boilerplate directories found in {project_output_dir}. Please ensure boilerplates are copied manually to this location.")
-        return # Exit if no relevant paths are found
-    # END ADDED LINES
+        if os.path.exists(destination_path) and os.path.exists(os.path.join(destination_path, 'package.json')):
+            logger.info(f"Backend boilerplate already exists at '{destination_path}'. Skipping copy.")
+            copied_output_dirs['backend'] = destination_path # Still store the path
+        else:
+            logger.info(f"Copying backend boilerplate from '{source_path}' to '{destination_path}'")
+            try:
+                if os.path.exists(destination_path):
+                    logger.warning(f"Existing backend directory '{destination_path}' is incomplete or needs refresh. Removing before copy.")
+                    shutil.rmtree(destination_path)
+
+                os.makedirs(os.path.dirname(destination_path), exist_ok=True) # Ensure parent 'WizRD' exists
+                shutil.copytree(source_path, destination_path)
+                copied_output_dirs['backend'] = destination_path # Store the actual path
+                logger.info("Backend boilerplate copied successfully.")
+            except Exception as e:
+                logger.error(f"Failed to copy backend boilerplate: {e}")
+                return {} # Indicate failure
+
+    if not copied_output_dirs:
+        logger.warning("No boilerplates copied. Exiting orchestration.")
+        return {} # No boilerplates, nothing to generate code for
     
-    # --- Generate Frontend Code (if applicable) ---
-    if 'frontend' in copied_paths:
-        print(f"\n--- Generating frontend code ---")
-        frontend_boilerplate_name = actual_frontend_folder_name
+    # Step 1: Extract relevant BRD features using the first AI call
+    # This will pass the FULL BRD to the extractor AI, along with the specific feature.
+    # The result will be a SUBSET of the BRD relevant to the feature.
+    relevant_brd_context = extract_relevant_brd_features(
+        full_brd_analysis_json=brd_analysis_json,
+        specific_feature_request_text=specific_feature_prompt_content
+    )
+    #TEMPORARY DEBUG
+    logger.info(f"DEBUG: Content of relevant_brd_context (extracted BRD):\n{json.dumps(relevant_brd_context, indent=2)}")
 
-        # Define key boilerplate files to include in the prompt context
-        if frontend_boilerplate_name == "react_vite_ts":
-                frontend_context_files = [
-                'package.json',
-                'vite.config.ts',
-                'index.html', # This is the root index.html
-                'src/main.tsx',
-                'src/App.tsx',
-                'src/index.css',
-                'eslint.config.js',
-                'tsconfig.json',
-                'tsconfig.node.json'
-                # '.gitignore' and 'package-lock.json' are typically not modified by AI
-            ]
-        elif frontend_boilerplate_name == "next_tailwind":
-                frontend_context_files = [
-                'package.json',
-                'tailwind.config.js',
-                'app/layout.tsx',
-                'app/page.tsx',
-                'app/globals.css'
-            ]
-        else:
-            frontend_context_files = [] # Add other frontend types if needed
+    # Check if extraction was successful enough to proceed
+    if not relevant_brd_context or not relevant_brd_context.get('themes'):
+        logger.error("Failed to extract relevant BRD context. Aborting code generation.")
+        return {} # Exit if we can't get relevant BRD info
 
-        # Get content of boilerplate files to provide as context to the AI
-        frontend_context = get_boilerplate_file_content(
-            copied_paths['frontend'],
-            frontend_context_files
-        )
+    logger.info(f"\nAI code generation initiated for project at: {current_project_root}. AI will now add/modify code.")
 
-        
-        frontend_framework = tech_stack_json.get('frontend', {}).get('framework', 'unknown frontend framework')
+    # Step 2: Call the main Code Generation AI (this is the second AI call)
+    # Pass the *extracted* BRD context to the main code generation function
+    ai_raw_response = generate_code_from_requirements( # generate_code_from_requirements must be defined
+        brd_analysis_json=relevant_brd_context, # <--- IMPORTANT: Pass the extracted subset here
+        tech_stack_json=tech_stack_json,
+        specific_feature_prompt=specific_feature_prompt_content,
+        default_design_prompt=default_design_prompt_content,
+        system_prompt_architecture=system_prompt_content
+    )
 
-        frontend_prompt = f"""
-        The basic project structure for a {frontend_framework} frontend 
-        ({frontend_boilerplate_name}) has already been generated and is in place at the root of the frontend project.
-
-        Your task is to implement the following frontend features:
-        {brd_analysis_json.get('frontend_features', 'Implement basic application logic as per BRD analysis.')}
-
-        To achieve this, you **MUST** make necessary modifications to existing boilerplate files (e.g., `src/App.tsx`, `src/main.tsx` for routing, `package.json` for new dependencies). You should also create any new components, pages, or service files required.
-
-        **Provide the *full and complete content* for any file you modify or create.** If you modify an existing boilerplate file, ensure you output its entire new content, not just the changes.
-        List files with their relative paths from the frontend project root, followed by their content.
-
-        --- Existing Frontend Files Context ---
-        {frontend_context}
-
-        --- Requested Frontend Files ---
-        """
-        frontend_ai_response = get_ai_response(frontend_prompt)
-        save_generated_code(frontend_ai_response, copied_paths['frontend'])
-        print(f"Frontend code generation requested. Output directory: {copied_paths['frontend']}")
-
-    # --- Generate Backend Code (if applicable) ---
-    if 'backend' in copied_paths:
-        print(f"\n--- Generating backend code ---")
-        backend_boilerplate_name = actual_backend_folder_name
-
-        # Define key boilerplate files to include in the prompt context
-        if backend_boilerplate_name == "node_js":
-            backend_context_files = [
-                'package.json',
-                'tsconfig.json',
-                '.env.example',
-                'eslint.config.js',
-                'src/routes/health.ts',
-                'src/routes/index.ts' # This is likely your main routing file
-                # '.gitignore', 'package-lock.json', and 'README.md' are typically not modified by AI
-            ]
-        elif backend_boilerplate_name == "python_flask":
-            backend_context_files = [
-                'requirements.txt',
-                'app.py',
-                '.env.example'
-            ]
-        else:
-            backend_context_files = [] # Add other backend types if needed
-
-        # Get content of boilerplate files to provide as context to the AI
-        backend_context = get_boilerplate_file_content(
-            copied_paths['backend'],
-            backend_context_files
-        )
-
-        backend_framework = tech_stack_json.get('backend', {}).get('framework', 'unknown backend framework')
-        backend_language = tech_stack_json.get('backend', {}).get('language', 'unknown backend language')
-
-        backend_prompt = f"""
-        The basic project structure for a {backend_language} + {backend_framework} backend
-        ({backend_boilerplate_name}) has already been generated and is in place at the root of the backend project.
-
-        Your task is to implement the following backend functionalities:
-        {brd_analysis_json.get('backend_features', 'Implement basic API endpoints as per BRD analysis.')}
-
-        To achieve this, you **MUST** make necessary modifications to existing boilerplate files (e.g., `src/index.ts` for adding new routes/middleware, `package.json` for new dependencies, `src/data-source.ts` for entities). You should also create any new routes, controllers, services, or database models/entities required.
-
-        **Provide the *full and complete content* for any file you modify or create.** If you modify an existing boilerplate file, ensure you output its entire new content, not just the changes.
-        List files with their relative paths from the backend project root, followed by their content.
-
-        --- Existing Backend Files Context ---
-        {backend_context}
-
-        --- Requested Backend Files ---
-        """
-        backend_ai_response = get_ai_response(backend_prompt)
-        save_generated_code(backend_ai_response, copied_paths['backend'])
-        print(f"Backend code generation requested. Output directory: {copied_paths['backend']}")
-
-    print(f"\nAI code generation initiated for project at: {project_output_dir}. AI will now add/modify code.")
-    return copied_paths
+    if ai_raw_response:
+        logger.info("AI response received. Saving generated code...")
+        # Save generated code using the *single* response and the copied_output_dirs
+        save_generated_code(ai_raw_response, output_base_dirs=copied_output_dirs, logger=logger) # save_generated_code must be defined
+        logger.info("Generated code saved successfully.")
+        return copied_output_dirs # Return the paths if other parts of your script need them
+    else:
+        logger.error("AI response was empty or malformed. No code saved.")
+        return {}
+    
 
 # --- Code Generation Function ---
 def generate_code_from_requirements(brd_analysis_json, tech_stack_json, specific_feature_prompt, default_design_prompt, system_prompt_architecture):
@@ -466,45 +470,54 @@ def generate_code_from_requirements(brd_analysis_json, tech_stack_json, specific
     return get_ai_response(prompt)
 
 # --- Function to Save Generated Code to Files ---
-def save_generated_code(ai_response_json_str: str, project_paths: dict):
+def save_generated_code(ai_response_json_str: str, output_base_dirs: dict, logger): # Added logger, renamed project_paths to output_base_dirs for clarity
+    logger.info(f"\nCode generation complete. Files saved/updated in project directories.")
+    if 'frontend' in output_base_dirs:
+        logger.info(f"Frontend code in: {os.path.abspath(output_base_dirs['frontend'])}")
+    if 'backend' in output_base_dirs:
+        logger.info(f"Backend code in: {os.path.abspath(output_base_dirs['backend'])}")
     """
     Parses the AI's JSON response and saves the code content into respective files.
-    Now supports both traditional saving and boilerplate-integrated saving.
-    
+    Supports boilerplate-integrated saving and intelligent package.json updates.
+
     Args:
-        ai_response_json_str (str): The raw JSON string received from the AI
-        output_base_dir (str): Base directory for traditional saving (default: "generated_code")
-        project_paths (dict): Optional - {'frontend': path, 'backend': path} for boilerplate integration
+        ai_response_json_str (str): The raw JSON string received from the AI.
+        output_base_dirs (dict): Dictionary of base paths for frontend/backend
+                                 (e.g., {'frontend': '/path/to/WizRD/frontend', 'backend': '/path/to/WizRD/backend'}).
+        logger: The logger instance for output.
     """
     try:
+        logger.info("DEBUG: Entering save_generated_code function.")
         response_data = json.loads(ai_response_json_str)
+
+        # Check for the main 'files' array
         if "files" not in response_data or not isinstance(response_data["files"], list):
-            logger.error("AI response is not in the expected 'files' JSON format")
-            print("AI Response was not in expected JSON format.")
-            print(f"Raw AI Response:\n{ai_response_json_str}")
+            logger.error("AI response is not in the expected 'files' JSON format.")
+            logger.debug(f"Raw AI Response:\n{ai_response_json_str}") # Use debug for full raw response
             return
 
+        # Process individual files
         for file_info in response_data["files"]:
             file_path = file_info.get("file_path")
             content = file_info.get("content")
+            overwrite = file_info.get("overwrite", True) # Default to overwrite if not specified
 
             if not file_path or content is None:
-                logger.warning(f"Skipping malformed file entry: {file_info}")
+                logger.warning(f"Skipping malformed file entry (missing path or content): {file_info}")
                 continue
 
             # Determine the full path based on the file_path prefix (frontend/ or backend/)
             full_path = None
-            if file_path and file_path.startswith("frontend/") and 'frontend' in project_paths:
-                # Ensure the 'frontend/' prefix itself is not duplicated in the join
-                # Example: os.path.join(project_paths['frontend'], 'src/App.tsx')
-                # not os.path.join(project_paths['frontend'], 'frontend/src/App.tsx')
-                # So we remove the "frontend/" prefix from file_path before joining
+            target_base_dir = None
+
+            if file_path.startswith("frontend/") and 'frontend' in output_base_dirs:
                 relative_file_path = file_path[len("frontend/"):]
-                full_path = os.path.join(project_paths['frontend'], relative_file_path)
-            elif file_path and file_path.startswith("backend/") and 'backend' in project_paths:
-                # Same for backend
+                target_base_dir = output_base_dirs['frontend']
+                full_path = os.path.join(target_base_dir, relative_file_path)
+            elif file_path.startswith("backend/") and 'backend' in output_base_dirs:
                 relative_file_path = file_path[len("backend/"):]
-                full_path = os.path.join(project_paths['backend'], relative_file_path)
+                target_base_dir = output_base_dirs['backend']
+                full_path = os.path.join(target_base_dir, relative_file_path)
             else:
                 logger.warning(f"Skipping file with invalid or unhandled path prefix: {file_path}")
                 continue
@@ -514,27 +527,58 @@ def save_generated_code(ai_response_json_str: str, project_paths: dict):
                 with open(full_path, "w", encoding="utf-8") as f:
                     f.write(content)
                 logger.info(f"Saved: {full_path}")
-        
-        print(f"\nCode generation complete. Files saved/updated in project directories.")
-        # You might want to print the actual project_paths['frontend'] or project_paths['backend'] for user clarity
-        if 'frontend' in project_paths:
-            print(f"Frontend code in: {os.path.abspath(project_paths['frontend'])}")
-        if 'backend' in project_paths:
-            print(f"Backend code in: {os.path.abspath(project_paths['backend'])}")
-        
+
+        # --- Handle new_npm_dependencies (CRUCIAL NEW LOGIC) ---
+        if "new_npm_dependencies" in response_data:
+            new_deps_info = response_data["new_npm_dependencies"]
+            logger.info("Processing new npm dependencies suggested by AI...")
+
+            # Assume new_npm_dependencies applies to the backend's package.json for now
+            # You might need to refine this if the AI specifies frontend/backend separately for deps
+            backend_package_json_path = os.path.join(output_base_dirs.get('backend', ''), 'package.json')
+            frontend_package_json_path = os.path.join(output_base_dirs.get('frontend', ''), 'package.json')
+
+
+            # Process Backend package.json
+            if os.path.exists(backend_package_json_path):
+                try:
+                    with open(backend_package_json_path, 'r+', encoding='utf-8') as f:
+                        pkg_json = json.load(f)
+                        updated = False
+
+                        if 'dependencies' in new_deps_info and new_deps_info['dependencies']:
+                            pkg_json.setdefault('dependencies', {}).update(new_deps_info['dependencies'])
+                            updated = True
+                        if 'devDependencies' in new_deps_info and new_deps_info['devDependencies']:
+                            pkg_json.setdefault('devDependencies', {}).update(new_deps_info['devDependencies'])
+                            updated = True
+
+                        if updated:
+                            f.seek(0) # Rewind to the beginning
+                            json.dump(pkg_json, f, indent=2)
+                            f.truncate() # Truncate any remaining old content
+                            logger.info(f"Updated backend package.json with new dependencies: {backend_package_json_path}")
+                        else:
+                            logger.info("No new backend dependencies to add.")
+                except Exception as e:
+                    logger.error(f"Failed to update backend package.json: {e}", exc_info=True)
+            else:
+                logger.warning(f"Backend package.json not found at {backend_package_json_path}. Cannot add new dependencies.")
+
+            # Process Frontend package.json (similar logic, if AI suggests frontend deps)
+            # You might need to add logic here if AI starts suggesting frontend deps in new_npm_dependencies
+            # For now, assuming it's primarily for backend based on your earlier prompt discussion.
+            # If the AI ever provides a "frontend_new_npm_dependencies" or similar, you'd extend this.
+
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse AI response as JSON: {e}", exc_info=True)
-        print("Error: Invalid JSON response from AI.")
-        print(f"Raw Response:\n{ai_response_json_str}")
+        logger.error("Error: Invalid JSON response from AI.") # Changed print to logger
+        logger.debug(f"Raw Response:\n{ai_response_json_str}") # Use debug for full raw response
     except Exception as e:
         logger.critical(f"Error while saving files: {e}", exc_info=True)
 
-MY_PROJECT_NAME = "WizRD"
-GENERATED_CODE_ROOT = "generated_code"
-PERMANENT_PROJECT_DIR = os.path.join(GENERATED_CODE_ROOT, MY_PROJECT_NAME)
-os.makedirs(PERMANENT_PROJECT_DIR, exist_ok=True)
-print(f"Working in project directory: {PERMANENT_PROJECT_DIR}")
-print(f"Ensure boilerplates are manually copied into '{os.path.join(PERMANENT_PROJECT_DIR, 'frontend')}' and '{os.path.join(PERMANENT_PROJECT_DIR, 'backend')}'")
+PROJECT_NAME = "WizRD"
+GENERATED_CODE_BASE_DIR = "generated_code"
 
 # --- Main Execution Block ---
 if __name__ == "__main__":
@@ -544,6 +588,12 @@ if __name__ == "__main__":
     # brd_analysis_from_app.j2 and tech_stack_identified_prompt.j2 should contain pure JSON
     # so we json.loads them after loading.
     BRD_ANALYSIS_DICT = json.loads(load_prompt_template("brd_analysis_from_app.j2"))
+    #TEMPORARY DEBUG
+    logger.debug(f"Type of BRD_ANALYSIS_DICT: {type(BRD_ANALYSIS_DICT)}")
+    logger.debug(f"Content of BRD_ANALYSIS_DICT (first 500 chars): {str(BRD_ANALYSIS_DICT)[:500]}")
+    # If the dictionary is very large, you might need to inspect specific parts
+    # logger.debug(f"First theme: {BRD_ANALYSIS_DICT.get('themes', [])[0] if BRD_ANALYSIS_DICT.get('themes') else 'No themes'}")
+
     TECH_STACK_IDENTIFIED_DICT = json.loads(load_prompt_template("tech_stack_identified.j2"))
 
     # Other prompts are just text strings
@@ -558,18 +608,10 @@ if __name__ == "__main__":
     project_paths = orchestrate_code_generation(
         brd_analysis_json = BRD_ANALYSIS_DICT,
         tech_stack_json = TECH_STACK_IDENTIFIED_DICT,
-        project_output_dir = PERMANENT_PROJECT_DIR
+        project_output_base_dir = GENERATED_CODE_BASE_DIR,
+        system_prompt_content = SYSTEM_PROMPT_ARCHITECTURE_CONTENT,
+        default_design_prompt_content = DEFAULT_DESIGN_PROMPT_CONTENT,
+        specific_feature_prompt_content = SPECIFIC_FEATURE_PROMPT_CONTENT
     )
-    # --- Call the Code Generation Function ---
-    ai_raw_response = generate_code_from_requirements(
-        brd_analysis_json = BRD_ANALYSIS_DICT,
-        tech_stack_json = TECH_STACK_IDENTIFIED_DICT,
-        specific_feature_prompt = SPECIFIC_FEATURE_PROMPT_CONTENT,
-        default_design_prompt = DEFAULT_DESIGN_PROMPT_CONTENT,
-        system_prompt_architecture = SYSTEM_PROMPT_ARCHITECTURE_CONTENT
-    )
-
-    # --- Save the Generated Code ---
-    save_generated_code(ai_raw_response, project_paths=project_paths)
 
     logger.info("--- Code Generation Test Script Finished ---")

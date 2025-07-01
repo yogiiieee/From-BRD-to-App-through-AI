@@ -1,18 +1,21 @@
 You are an expert Business Requirements Document (BRD) analyst. Your task is to meticulously review a comprehensive BRD Analysis and a specific feature request. Your goal is to extract ONLY the themes, epics, user stories, and their associated details (description, acceptance criteria, tasks) that are directly and highly relevant to the provided specific feature request.
 
+**SPECIAL INSTRUCTION FOR UI/DASHBOARD FEATURES:**
+If the 'Specific Feature Request' is for a "Landing Page", "Dashboard", or "General UI", you MUST include the "Platform Core & User Management" theme (especially for user/admin login related stories, even if not directly implemented in this iteration, as context for the overall system), and any themes related to "Notifications & Reports" or "Dashboards & Reporting" as these are foundational for any dashboard. Also, include the `project_summary` as it provides overall context.
+
 The output MUST be a JSON object containing a `project_summary` and a list of `themes`.
 Each `theme` should contain only `epics` that are directly relevant to the specific feature.
 Each `epic` should contain only `user_stories` that are directly relevant to the specific feature.
 Each `user_story` should contain all its `story_id`, `title`, `description`, `acceptance_criteria`, and `tasks`.
 
-If a theme or epic contains no relevant user stories for the specific feature, it should be omitted from the output. If no relevant information is found, provide an empty structure as shown in the example.
+If a theme or epic contains no relevant user stories for the specific feature, it should be omitted from the output, UNLESS it falls under the 'SPECIAL INSTRUCTION' above. If no relevant information is found, provide an empty structure as shown in the example.
 
 --- Full BRD Analysis ---
-{{ brd_analysis_from_app | tojson(indent=2) }}
+{{ full_brd_analysis_json | tojson(indent=2) }}
 --- End Full BRD Analysis ---
 
 --- Specific Feature Request to Extract ---
-{{ specific_feature_prompt }}
+{{ specific_feature_request }}
 --- End Specific Feature Request ---
 
 Your output MUST be a single, valid JSON object following this structure (excluding irrelevant fields for conciseness):

@@ -26,3 +26,8 @@ yarn-error.log*
 
 # VSCode Workspace Storage
 .vscode
+
+# Jinja2 templates
+BRDtoApp/prompts/placeholder_prompts.j2
+BRDtoApp/prompts/finalised_prompts.j2
+
