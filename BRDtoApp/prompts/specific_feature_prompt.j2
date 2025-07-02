@@ -1,29 +1,54 @@
 Implement the core **Landing Page and Dashboard functionality** for the application.
 
-**CRITICAL INSTRUCTION: For this iteration, EXPLICITLY OMIT all Login, Signup, and Admin Agency Approval forms, routes, and backend logic.** Focus solely on the structure and placeholder content for the Landing Page and Dashboards.
+**CRITICAL INSTRUCTION: For this iteration, EXPLICITLY OMIT all Login, Signup, and Admin Agency Approval forms, routes, and backend logic.** Focus solely on the structure, rich placeholder content, and advanced UI elements for the Landing Page and Dashboards. **DO NOT implement any actual data fetching or API calls on the frontend or backend.** All data should be represented by static placeholder UI elements.
 
 **Overall Goals:**
-* Create a visually appealing and functional main landing page for the application.
-* Develop a basic dashboard structure that will serve as the primary interface after a user (conceptually) logs in.
-* Ensure the UI components adhere to the defined design principles.
+* Create a visually appealing, fully-featured, and production-worthy main landing page.
+* Develop a dynamic and structured dashboard interface that intelligently displays content based on user role (mocked).
+* Ensure all UI components and layouts adhere strictly to the detailed design principles provided in the 'Default Design Prompt'.
 
 **Frontend Requirements:**
+
 * **Landing Page (`/` route):**
-    * This will serve as the initial entry point to the application (assuming no prior login for this iteration).
-    * It should display a general overview of the platform's features and purpose, as described in the BRD's "Landing Page" section (4.1).
-    * Include a placeholder for "Top Agency Listings" (a rating system for recruitment agencies).
-    * **Crucially, DO NOT include any registration/login forms or links on this page for this iteration.**
+    * This will serve as the initial entry point to the application.
+    * **Header/Navigation Bar (CRITICAL):**
+        * A prominent, responsive navigation bar at the top.
+        * It **MUST** include a placeholder for the "Mahindra Auto Recruitment Platform" **logo/branding** (e.g., using `Lucide` icons or simple text branding).
+        * Include placeholder navigation links (e.g., "Features", "About Us", "Contact"). These links do not need to route anywhere yet.
+    * **Main Content Sections (CRITICAL - AVOID EMPTY BLOCKS):**
+        * Go beyond a single centered block. Design a visually engaging hero section with a clear headline and sub-headline.
+        * Include at least **two additional distinct content sections** below the hero section. These sections should visually showcase the platform's purpose and features (e.g., "Why Choose Us?", "How It Works", "Key Features").
+        * Each section should have a clear heading and placeholder text/visuals (e.g., `Lucide` icons to represent features).
+        * Include a prominent call-to-action button (e.g., "Explore Dashboards") that links to `/dashboard`.
+    * **Footer (CRITICAL):**
+        * A clear, concise footer at the bottom of the page.
+        * It **MUST** include copyright information (e.g., "© 2025 Mahindra Auto Recruitment Platform"), and placeholder links for "Privacy Policy" and "Terms of Service".
+    * **No Login/Signup:** Reiterate: **DO NOT** include any registration/login forms or links on this page.
+
 * **Dashboard Page (`/dashboard` route):**
     * This page will serve as the main operational hub.
-    * It **MUST** include:
-        * A prominent **navigation bar** at the top. This navigation bar should be present across all main application views (Dashboard, Job Posting, Candidate Management).
-        * A **profile dropdown** within the navigation bar (e.g., on the right side), including a placeholder profile picture icon. This dropdown should conceptually show the logged-in user's name/email (use placeholder text like "User Name" or "user@example.com") and have a "Logout" option (which can be a placeholder link for now).
-        * Two distinct main sections or cards on the primary content area: one for **"Job Posting"** and another for **"Candidate Management."** These sections should be clear visual divisions, displaying simple placeholder text or icons relevant to their function.
-    * **Dashboard Content (Placeholder):** Based on BRD section 4.13 "Dashboards", conceptually represent the different user dashboards (Super Admin, Dealership HR, Placement Agencies) within the single Dashboard page. You can use simple headings or cards to indicate these different views, but **DO NOT implement their full data fetching or complex UI for this iteration.** Focus on the *structure*.
-        * For Super Admin: Placeholder for "Top Jobs posted", "Top Dealers", "Top Placement Agencies".
-        * For Dealership HR: Placeholder for "Top Jobs posted", "Total Resumes Received", "Candidates Selected".
-        * For Placement Agencies: Placeholder for "Candidate Profiles Shared", "Bifurcation of profiles by position", "Candidate Status".
+    * **Navigation Bar (CRITICAL):**
+        * A prominent, responsive navigation bar at the top, consistent with the Landing Page's header (or a slightly adapted version for the dashboard context).
+        * It **MUST** include the "Mahindra Auto Recruitment Platform" **logo/branding**.
+        * Include main navigation links relevant to the dashboard (e.g., "Dashboard", "Job Postings", "Candidate Management"). These links do not need to route anywhere yet.
+        * Include a **dynamic profile dropdown** with a placeholder user name/email ("User Name", "user@example.com") and a "Logout" option (placeholder link).
+    * **Dynamic Dashboard Views (CRITICAL):**
+        * The dashboard **MUST** dynamically display content based on a mocked user role.
+        * Implement a simple **state variable** (e.g., `const [userRole, setUserRole] = useState<'Super Admin' | 'Dealership HR' | 'Placement Agency'>('Super Admin');`) to simulate the current user's role.
+        * Provide a **simple UI element (e.g., buttons, a dropdown, or tabs)** that allows switching between these mocked roles (`Super Admin`, `Dealership HR`, `Placement Agency`) to demonstrate the dynamic view.
+        * **Conditionally render** the appropriate dashboard content based on the `userRole` state.
+    * **Dashboard Content (Visual Widgets - CRITICAL):**
+        * For *each* user role's dashboard view, implement **visually distinct placeholder widgets/cards** that represent the metrics and information outlined in the BRD user stories (US-5.2.1, US-5.2.2, US-5.2.3).
+        * **DO NOT fetch real data.** Instead, use:
+            * **Large, bold numbers** for KPIs (e.g., "120" for "Top Jobs Posted").
+            * **Simple bar charts or pie charts mocked using `div` elements with Tailwind widths/heights and background colors** to represent data distribution (e.g., "Bifurcation of profiles by position").
+            * **Simple tables with placeholder headers and a few sample rows** for lists (e.g., "Top Agency Listings").
+            * **Use `Lucide` icons** to visually enhance these widgets (e.g., a chart icon, a user icon, a checkmark for completed tasks).
+        * Ensure these widgets are laid out responsively using `flex` or `grid`.
+    * **Footer (CRITICAL):**
+        * A clear, concise footer at the bottom of the Dashboard page, consistent in style with the Landing Page footer.
+
 * **Application Routing:** Ensure `react-router-dom` is configured in `App.tsx` to handle navigation between the `/` (Landing Page) and `/dashboard` (Dashboard Page) routes.
 
 **Backend Requirements:**
-* **For this iteration, NO backend API changes are required.** The focus is purely on the frontend UI structure. Assume any necessary data for the dashboard placeholders would conceptually come from an API, but **DO NOT implement new API endpoints or logic on the backend for this task.**
+* **For this iteration, NO backend API changes are required.** The focus is purely on the frontend UI structure and rich visual mockups.
