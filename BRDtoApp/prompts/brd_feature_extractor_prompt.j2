@@ -10,6 +10,8 @@ Each `user_story` should contain all its `story_id`, `title`, `description`, `ac
 
 If a theme or epic contains no relevant user stories for the specific feature, it should be omitted from the output, UNLESS it falls under the 'SPECIAL INSTRUCTION' above. If no relevant information is found, provide an empty structure as shown in the example.
 
+**CRITICAL INSTRUCTION: You MUST flatten the output structure.** The final JSON **MUST ONLY** contain `project_summary` and a top-level `user_stories` array. **DO NOT include `themes` or `epics` arrays in the output JSON at all.** All relevant user stories should be directly listed under the `user_stories` array.
+
 --- Full BRD Analysis ---
 {{ full_brd_analysis_json | tojson(indent=2) }}
 --- End Full BRD Analysis ---
@@ -22,34 +24,20 @@ Your output MUST be a single, valid JSON object following this structure (exclud
 ```json
 {
   "project_summary": "High-level summary of the entire project (from the BRD).",
-  "themes": [
+  "user_stories": [
     {
-      "theme_name": "Name of Relevant Theme 1",
-      "description": "Description of Theme 1.",
-      "epics": [
-        {
-          "epic_name": "Name of Relevant Epic 1.1",
-          "description": "Description of Epic 1.1.",
-          "user_stories": [
-            {
-              "story_id": "US-X.Y.Z",
-              "title": "As a [role], I want to [action], so that [benefit].",
-              "description": "Detailed description of the user story.",
-              "acceptance_criteria": [
-                "Criteria 1",
-                "Criteria 2"
-              ],
-              "tasks": [
-                "Task 1",
-                "Task 2"
-              ]
-            }
-            // ... more relevant user stories for this epic
-          ]
-        }
-        // ... more relevant epics for this theme
+      "story_id": "US-X.Y.Z",
+      "title": "As a [role], I want to [action], so that [benefit].",
+      "description": "Detailed description of the user story.",
+      "acceptance_criteria": [
+        "Criteria 1",
+        "Criteria 2"
+      ],
+      "tasks": [
+        "Task 1",
+        "Task 2"
       ]
     }
-    // ... more relevant themes
+    // ... more relevant user stories
   ]
 }

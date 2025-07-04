@@ -1,0 +1,79 @@
+#LOGIN/SIGNUP PROMPT - (still needs significant improvements)
+Implement the full **Login and Signup functionality** for the application, AND the **Super Admin Agency Approval** feature (User Story US-003).
+
+        **Overall Goals:**
+        * A user should be able to create an account via the signup page.
+        * A user should be able to log into an existing account via the login page.
+        * The login and signup flows must be interconnected (e.g., links between the pages).
+        * A Super Admin must be able to view pending agency registration requests and approve or reject them.
+
+        **CRITICAL INSTRUCTION: ALL BACKEND DATA STORAGE MUST BE IN-MEMORY.**
+        * **DO NOT** generate any database models, schema definitions, database connection code, ORM configurations (e.g., TypeORM entities, migrations), or database-specific queries.
+        * For any data that would typically be stored in a database (users, pending registrations, roles), you **MUST** implement it using simple **in-memory data structures** (e.g., JavaScript Arrays or Maps within your backend controllers or a dedicated in-memory store module).
+        * Mock persistence: Assume data is lost when the server restarts.
+
+        **Frontend Requirements:**
+        * **Login Page:**
+            * Allow users to input Email and Password.
+            * Include "Remember me" checkbox and "Forgot password" link (can be placeholders).
+            * Button to submit login credentials.
+            * Basic client-side validation for input fields.
+            * On successful login, store a mock JWT token (in localStorage or a simple in-memory variable for demo).
+            * Redirect to a placeholder dashboard/home page upon successful login, or to an admin dashboard if the user is a Super Admin.
+            * **Landing Page (`/dashboard` or `/home`):**
+            * Create a central landing page component that users are redirected to after successful login.
+            * This page **MUST** include:
+                * A prominent **navigation bar** at the top.
+                * A **profile dropdown** in the navigation bar (e.g., on the right side), including a placeholder profile picture icon. This dropdown should ideally show the logged-in user's name/email and have a "Logout" option.
+                * Two distinct main sections or cards on the primary content area: one for **"Job Posting"** and another for **"Candidate Management."** These can be simple placeholder sections for now.
+            * Ensure `react-router-dom` has a route configured for this landing page.
+            * Display clear error messages for invalid credentials or other login failures.
+        * **Signup Page (US-001, US-002 details combined):**
+            * Allow users to input Full Name, Username, Email, Password, and Confirm Password.
+            * Include a Role selection (e.g., dropdown or radio buttons for "Dealership" / "Agency").
+            * For Dealership HR registration, include a field for "Mahindra Dealership Code."
+            * For Recruitment Agency registration, display a message indicating that their registration is pending approval after submission.
+            * Button to submit registration details.
+            * Basic client-side validation for input fields (e.g., email format, password matching).
+            * Display clear error messages for invalid inputs or if email/username already exists.
+            * On successful registration, redirect to the login page or display a success message.
+        * **Admin Agency Approval Page (for US-003):**
+            * Create a new frontend page (e.g., `/admin/approvals` or part of a simple admin dashboard).
+            * This page should only be accessible to users with the "Super Admin" role (implement a basic client-side mock check for the token/role).
+            * Display a list or table of all pending agency registration requests (fetch from backend).
+            * For each pending request, provide "Approve" and "Reject" buttons.
+            * Display a confirmation or success message upon approval/rejection.
+            * Agencies whose requests are rejected should be marked as 'rejected' in the in-memory store, and should not be able to log in with agency privileges.
+        * **API Service Integration:** Frontend components must interact with backend API endpoints for login, signup, and admin approvals.
+        * **Application Routing:** Ensure `react-router-dom` is configured in `App.tsx` to handle navigation between `/login`, `/signup`, and `/admin/approvals` routes.
+
+        **Backend Requirements:**
+        * **API Endpoints:**
+            * Existing: `POST /api/auth/signup` and `POST /api/auth/login`.
+            * New: `GET /api/admin/pending-agencies` (to fetch pending agency requests) and `POST /api/admin/approve-reject-agency` (to handle approval/rejection).
+        * **IN-MEMORY User Storage:** All user data MUST be stored and managed exclusively IN-MEMORY. Use a simple array (e.g., `inMemoryUsers: User[] = []`) to store mock user objects. **You MUST define a `User` TypeScript interface (as per "TypeScript Type Safety" instruction below) that precisely reflects these properties:** `{ id: number; fullName: string; username: string; email: string; password: string; role: 'Agency' | 'Dealership HR' | 'Super Admin'; status: 'pending' | 'approved' | 'rejected'; dealershipCode?: string; }`. Ensure `password` holds the mock-hashed value.
+            * **NO DATABASE INTERACTION, NO ORM, NO DATABASE MODELS, NO MIGRATIONS, NO DATABASE-SPECIFIC QUERIES.**
+        * **Signup Logic:**
+            * Accepts Full Name, Username, Email, Password, Role.
+            * Perform basic server-side validation.
+            * Check for existing email/username in in-memory store. Return 409 Conflict if found.
+            * Generate a simple unique ID for new users.
+            * For password, apply a *mock* hashing (e.g., a simple string transformation or concatenation).
+            * Add the new user to the in-memory store. **For 'Agency' roles, set their initial `status` to 'pending'.** For 'Dealership HR' or 'Super Admin', set `status` to 'approved'.
+            * Return 201 Created on success.
+        * **Login Logic:**
+            * Accepts Email and Password.
+            * Find user in in-memory store by email.
+            * Compare provided password with stored password (mock comparison).
+            * **Before authenticating, check user's `status`:** If an 'Agency' user's status is 'pending' or 'rejected', prevent login and return an appropriate error (e.g., 403 Forbidden).
+            * Return 401 Unauthorized for invalid credentials.
+            * On successful login, return 200 OK with a *mock* JWT token (e.g., `"mock_jwt_token_for_user_email_and_role"`).
+        * **Admin Approval Logic (for US-003):**
+            * **`GET /api/admin/pending-agencies`:** Return a list of all users from in-memory store whose `role` is 'Agency' and `status` is 'pending'.
+            * **`POST /api/admin/approve-reject-agency`:**
+                * Accepts `userId` and `action` ('approve' or 'reject').
+                * Find the user in the in-memory store by `userId`.
+                * Update the user's `status` to 'approved' or 'rejected' based on `action`.
+                * Return 200 OK with a success message.
+            * Implement a basic authorization check for these admin endpoints: only users with `role: 'Super Admin'` should be able to access them (mock check based on token data).
+
